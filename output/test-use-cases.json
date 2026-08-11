@@ -1,0 +1,163 @@
+{
+  "use_cases": [
+    {
+      "id": "UC-LOGIN",
+      "name": "Registered customer signs in with email and password",
+      "description": "A customer submits an email address and password to the login endpoint. The application retrieves the corresponding user record, verifies the submitted password against the stored password hash, and issues a signed access token or session credential used by subsequent authenticated requests.",
+      "entry_points": ["POST /rest/user/login"],
+      "source_refs": ["routes/login.ts", "lib/auth.ts", "models/user.ts"]
+    },
+    {
+      "id": "UC-LOGOUT",
+      "name": "Authenticated customer logs out",
+      "description": "An authenticated customer submits a logout request. The application invalidates the server-side session or refresh token where applicable and instructs the client to discard locally stored authentication credentials. If access tokens are stateless, the token may remain technically valid until expiry unless a revocation or deny-list mechanism is used.",
+      "entry_points": ["POST /rest/user/logout"],
+      "source_refs": ["routes/logout.ts", "lib/session.ts", "models/session.ts"]
+    },
+    {
+      "id": "UC-APIKEY",
+      "name": "External client authenticates using an API key",
+      "description": "A machine client sends an API key with an API request, typically in an Authorization header or dedicated API-key header. The application extracts the key, looks it up or validates a hash of it against the API-key store, determines the associated principal and permissions, and allows or rejects the requested operation.",
+      "entry_points": ["ANY /api/*"],
+      "source_refs": ["middleware/apiKeyAuth.ts", "lib/apiKeys.ts", "models/apiKey.ts"]
+    },
+    {
+      "id": "UC-APIKEY-CREATE",
+      "name": "Authenticated customer creates an API key",
+      "description": "An authenticated customer requests a new API key. The application generates a cryptographically random secret, stores the key or a non-reversible representation together with its owner and permissions, and returns the secret to the customer. The plaintext key is normally shown only once.",
+      "entry_points": ["POST /api/keys"],
+      "source_refs": ["routes/apiKeys.ts", "lib/apiKeys.ts", "models/apiKey.ts"]
+    },
+    {
+      "id": "UC-APIKEY-REVOKE",
+      "name": "Authenticated customer revokes an API key",
+      "description": "An authenticated customer requests that an existing API key be revoked. The application verifies ownership or administrative privileges and marks or removes the key so that subsequent requests using it are rejected.",
+      "entry_points": ["DELETE /api/keys/:id"],
+      "source_refs": ["routes/apiKeys.ts", "lib/apiKeys.ts", "models/apiKey.ts"]
+    },
+    {
+      "id": "UC-OAUTH-AUTHCODE",
+      "name": "Customer signs in using OAuth 2.0 Authorization Code flow",
+      "description": "The customer is redirected from the application to an external authorization server. After the customer authenticates and grants access, the authorization server redirects the browser back to the application's callback endpoint with a short-lived authorization code. The application exchanges the code directly with the authorization server for tokens and then establishes a local authenticated session.",
+      "entry_points": [
+        "GET /oauth/authorize",
+        "GET /oauth/callback",
+        "POST <authorization-server>/token"
+      ],
+      "source_refs": ["routes/oauth.ts", "lib/oauthClient.ts", "models/oauthAccount.ts"]
+    },
+    {
+      "id": "UC-OAUTH-PKCE",
+      "name": "Public client signs in using OAuth 2.0 Authorization Code with PKCE",
+      "description": "A browser or native application generates a code verifier and derives a code challenge before redirecting the customer to the authorization server. The authorization request includes the challenge. After receiving the authorization code, the client exchanges the code together with the original verifier for tokens. The authorization server verifies that the verifier corresponds to the challenge before issuing tokens.",
+      "entry_points": [
+        "GET <authorization-server>/authorize",
+        "POST <authorization-server>/token",
+        "GET /oauth/callback"
+      ],
+      "source_refs": ["client/oauth.ts", "lib/pkce.ts", "routes/oauthCallback.ts"]
+    },
+    {
+      "id": "UC-OIDC-LOGIN",
+      "name": "Customer signs in using OpenID Connect",
+      "description": "The application redirects the customer to an OpenID Connect provider using the authorization code flow. After authentication, the application exchanges the authorization code for an access token and ID token. The application validates the ID token's signature, issuer, audience, expiry, and nonce before mapping the external identity to a local customer account and creating an authenticated session.",
+      "entry_points": [
+        "GET /oidc/login",
+        "GET /oidc/callback",
+        "POST <identity-provider>/token",
+        "GET <identity-provider>/.well-known/openid-configuration",
+        "GET <identity-provider>/jwks"
+      ],
+      "source_refs": ["routes/oidc.ts", "lib/oidcClient.ts", "models/federatedIdentity.ts"]
+    },
+    {
+      "id": "UC-OAUTH-CLIENT-CREDENTIALS",
+      "name": "Service authenticates using OAuth 2.0 Client Credentials flow",
+      "description": "A backend service authenticates directly to the authorization server using a client identifier and client secret or another client-authentication mechanism. The authorization server validates the client and issues an access token representing the service itself. The service presents that token when calling a protected API.",
+      "entry_points": [
+        "POST <authorization-server>/token",
+        "ANY /api/*"
+      ],
+      "source_refs": ["lib/oauthClient.ts", "middleware/bearerAuth.ts", "config/oauth.ts"]
+    },
+    {
+      "id": "UC-OAUTH-DEVICE",
+      "name": "Customer authenticates using OAuth 2.0 Device Authorization flow",
+      "description": "A device with limited input capabilities requests a device code and user code from the authorization server. The device displays a verification URL and user code to the customer. The customer completes authentication on a separate browser-capable device while the original device periodically polls the token endpoint. Once authorization completes, the authorization server returns tokens to the original device.",
+      "entry_points": [
+        "POST <authorization-server>/device_authorization",
+        "GET <authorization-server>/verify",
+        "POST <authorization-server>/token"
+      ],
+      "source_refs": ["lib/deviceFlow.ts", "routes/deviceAuth.ts", "models/deviceAuthorization.ts"]
+    },
+    {
+      "id": "UC-OAUTH-REFRESH",
+      "name": "Client obtains a new access token using a refresh token",
+      "description": "A client submits a previously issued refresh token to the authorization server after an access token expires or approaches expiry. The authorization server validates the refresh token, its client binding, expiry, revocation status, and permitted scopes before issuing a new access token and optionally rotating the refresh token.",
+      "entry_points": ["POST <authorization-server>/token"],
+      "source_refs": ["lib/oauthClient.ts", "lib/tokenStore.ts", "models/refreshToken.ts"]
+    },
+    {
+      "id": "UC-OAUTH-TOKEN-REVOCATION",
+      "name": "Client revokes an OAuth token",
+      "description": "A customer or client requests revocation of an access token or refresh token. The authorization server validates the request and invalidates the supplied token or its associated grant so that it cannot be used to obtain further access.",
+      "entry_points": ["POST <authorization-server>/revoke"],
+      "source_refs": ["routes/oauthRevoke.ts", "lib/tokenStore.ts", "models/refreshToken.ts"]
+    },
+    {
+      "id": "UC-OAUTH-INTROSPECTION",
+      "name": "Resource server validates an opaque OAuth access token",
+      "description": "A protected API receives an opaque bearer token that cannot be validated locally. The resource server sends the token to the authorization server's introspection endpoint using its own credentials. The authorization server returns whether the token is active together with associated identity, client, scope, and expiry information, which the resource server uses to authorize the request.",
+      "entry_points": [
+        "ANY /api/*",
+        "POST <authorization-server>/introspect"
+      ],
+      "source_refs": ["middleware/bearerAuth.ts", "lib/tokenIntrospection.ts", "config/oauth.ts"]
+    },
+    {
+      "id": "UC-OAUTH-JWT",
+      "name": "Resource server validates a self-contained OAuth access token",
+      "description": "A protected API receives a signed JWT bearer token. The resource server retrieves or uses cached public signing keys from the authorization server, verifies the token signature, and validates claims such as issuer, audience, expiry, and scope before allowing the request.",
+      "entry_points": [
+        "ANY /api/*",
+        "GET <authorization-server>/jwks"
+      ],
+      "source_refs": ["middleware/bearerAuth.ts", "lib/jwtValidation.ts", "config/oauth.ts"]
+    },
+    {
+      "id": "UC-OAUTH-IMPLICIT",
+      "name": "Legacy browser client authenticates using OAuth 2.0 Implicit flow",
+      "description": "A browser-based client redirects the customer to the authorization server and receives an access token directly through the browser redirect rather than exchanging an authorization code at the token endpoint. The token is exposed to the browser execution environment and URL handling mechanisms. This is a legacy flow and is generally replaced by Authorization Code with PKCE.",
+      "entry_points": [
+        "GET <authorization-server>/authorize",
+        "GET /oauth/callback"
+      ],
+      "source_refs": ["client/legacyOAuth.ts", "routes/oauthCallback.ts"]
+    },
+    {
+      "id": "UC-OAUTH-PASSWORD",
+      "name": "Legacy client authenticates using OAuth 2.0 Resource Owner Password flow",
+      "description": "A client directly collects the customer's username and password and submits them to the authorization server together with its client credentials. The authorization server validates the customer's credentials and returns access and optionally refresh tokens. This legacy flow gives the client direct access to user credentials and should generally not be used in new systems.",
+      "entry_points": ["POST <authorization-server>/token"],
+      "source_refs": ["lib/legacyPasswordGrant.ts", "routes/token.ts", "models/user.ts"]
+    },
+    {
+      "id": "UC-OAUTH-SOCIAL-LINK",
+      "name": "Customer links an OAuth identity to an existing account",
+      "description": "An already authenticated customer initiates an OAuth or OpenID Connect flow to associate an external identity with the existing local account. After validating the callback and external identity, the application stores the provider identifier and subject mapping without creating a second local account.",
+      "entry_points": [
+        "GET /account/connections/:provider",
+        "GET /oauth/callback/:provider"
+      ],
+      "source_refs": ["routes/accountConnections.ts", "lib/oauthClient.ts", "models/federatedIdentity.ts"]
+    },
+    {
+      "id": "UC-OAUTH-ACCOUNT-PROVISION",
+      "name": "New customer account is provisioned from an OAuth identity",
+      "description": "A customer successfully authenticates with an external OAuth or OpenID Connect provider but no matching local account exists. The application validates the provider response, extracts approved identity attributes, creates a new local customer record, stores the external identity mapping, and establishes an authenticated session.",
+      "entry_points": ["GET /oauth/callback/:provider"],
+      "source_refs": ["routes/oauthCallback.ts", "services/accountProvisioning.ts", "models/federatedIdentity.ts"]
+    }
+  ]
+}
