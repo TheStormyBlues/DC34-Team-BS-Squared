@@ -9,6 +9,7 @@ output/
   dfds/<id>.mmd            stage 2 — the Mermaid diagram
   threats/<id>/<L>.json    stage 3 — one file per agent call, the cache unit
   threats/<id>.json        stage 3 — merged per use case, what stage 4 reads
+  report.md                stage 4 — the deliverable, and the chatbot's corpus
 ```
 
 **The filename is the use case id.** Stages never have to agree on anything but a
@@ -227,3 +228,37 @@ Then the real run:
 ```bash
 python -m main.stage3_stride --repo ./juice-shop
 ```
+
+---
+
+## Stage 4 → `output/report.md`
+
+```bash
+python -m main.stage4_report                    # deterministic, no model call
+python -m main.stage4_report --summarize        # adds an LLM executive summary
+```
+
+Reads `threats/<id>.json`, `use-cases/<id>.json` and `dfds/<id>.mmd`; writes one markdown
+document with the severity counts, the STRIDE coverage matrix, each DFD inlined as a
+```mermaid fence, and every finding sorted worst-first with its evidence.
+
+Assembly is deterministic — same inputs, byte-identical output — so the consistency claim
+the report makes about itself is true, and the demo cannot fail on a model call. Only
+`--summarize` invokes a model, and a failed summary is skipped rather than losing the
+report.
+
+## Chatting with the result
+
+```bash
+python -m main.chatbot                                     # interactive
+python -m main.chatbot --ask "What is the worst finding in the login flow?"
+```
+
+A DeepAgent rooted at the project directory, so it reads `output/` and the target clone
+directly — no vector store, nothing to re-index after a stage 3 re-run. Run stage 4 first:
+`report.md` is the summary layer of its corpus, so answers line up with what the report
+says.
+
+It is prompted to cite a threat id or a `file:line` for every claim, to treat
+`status: mitigated` as evidence of a control rather than a finding, and to decline when
+the corpus does not cover the question rather than infer a threat that was never raised.
