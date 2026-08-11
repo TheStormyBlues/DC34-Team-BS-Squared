@@ -10,7 +10,7 @@ import pathlib
 
 import pytest
 
-from main.target import display_name, output_dir, parse_remote, repo_slug
+from main.target import clone_dir, is_url, output_dir, parse_remote, repo_name, repo_slug
 
 
 @pytest.mark.parametrize(
@@ -59,9 +59,39 @@ def test_unsafe_or_empty_remotes_are_rejected(url):
     assert parse_remote(url) is None
 
 
-def test_output_dir_nests_owner_and_name(tmp_path, monkeypatch):
+def test_output_dir_is_keyed_by_repository_name(tmp_path, monkeypatch):
     monkeypatch.setattr("main.target.repo_slug", lambda p: "juice-shop/juice-shop")
-    assert output_dir(tmp_path) == pathlib.Path("output/juice-shop/juice-shop")
+    assert output_dir(tmp_path) == pathlib.Path("output/juice-shop")
+
+
+def test_clone_dir_mirrors_output_naming():
+    url = "https://github.com/juice-shop/juice-shop.git"
+    assert clone_dir(url) == pathlib.Path("repo/juice-shop")
+    assert output_dir(url) == pathlib.Path("output/juice-shop")
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("https://github.com/juice-shop/juice-shop.git", True),
+        ("git@github.com:owner/thing.git", True),
+        ("ssh://git@host/o/n.git", True),
+        ("repo/juice-shop", False),
+        ("./repo", False),
+        ("/abs/path", False),
+    ],
+)
+def test_is_url(target, expected):
+    assert is_url(target) is expected
+
+
+def test_repo_name_from_a_url_needs_no_checkout():
+    assert repo_name("https://github.com/juice-shop/juice-shop.git") == "juice-shop"
+
+
+def test_repo_name_rejects_an_unparseable_url():
+    with pytest.raises(ValueError):
+        repo_name("https://github.com/")
 
 
 def test_output_dir_stays_inside_the_root(tmp_path, monkeypatch):
@@ -77,6 +107,6 @@ def test_non_git_directory_falls_back_to_its_name(tmp_path):
     assert repo_slug(plain) == "some-source-drop"
 
 
-def test_display_name_is_the_repository_only(monkeypatch, tmp_path):
+def test_repo_name_from_a_checkout_drops_the_owner(monkeypatch, tmp_path):
     monkeypatch.setattr("main.target.repo_slug", lambda p: "juice-shop/juice-shop")
-    assert display_name(tmp_path) == "juice-shop"
+    assert repo_name(tmp_path) == "juice-shop"

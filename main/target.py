@@ -1,19 +1,19 @@
 """Identify the repository being scanned.
 
-Output is namespaced by the target so several applications can be analyzed without
-collision. The local clone directory is a poor name for that — it is whatever the
-person cloning happened to type, usually something like `repo` — so the identity comes
-from the git remote instead:
+Both the clone and the output are named after the repository, so a target lives at a
+predictable pair of paths:
 
-    https://github.com/juice-shop/juice-shop.git   ->  juice-shop/juice-shop
-    git@github.com:juice-shop/juice-shop.git       ->  juice-shop/juice-shop
+    https://github.com/juice-shop/juice-shop.git  ->  repo/juice-shop
+                                                      output/juice-shop
 
-giving `output/juice-shop/juice-shop/`. Two people who clone the same project to
-different directory names then produce the same output path, and a report can say what
-was actually analyzed rather than "repo".
+The name comes from the git remote rather than the local directory, so two people who
+cloned to differently-named directories still produce the same output path, and a
+report can say what was actually analyzed rather than "repo". Falls back to the
+directory name when the target is not a git checkout or has no remote, so a plain
+source drop still works.
 
-Falls back to the directory name when the target is not a git checkout or has no
-remote, so a plain source drop still works.
+`repo_slug()` keeps the full `owner/name` for provenance — it is what a report or a log
+line should say — while paths use `repo_name()`, the last segment only.
 
 Standard library only.
 """
@@ -70,6 +70,12 @@ def parse_remote(url: str) -> str | None:
     return "/".join(segments)
 
 
+def is_url(target: str) -> bool:
+    """True for something to clone rather than a path on disk."""
+    text = str(target)
+    return bool(re.match(r"^[a-z][a-z0-9+.-]*://", text, re.I)) or bool(re.match(r"^[^/\\]+@[^:/]+:", text))
+
+
 def repo_slug(repo_path: pathlib.Path) -> str:
     """`owner/name` for the checkout at `repo_path`, else its directory name."""
     repo_path = pathlib.Path(repo_path)
@@ -91,11 +97,48 @@ def repo_slug(repo_path: pathlib.Path) -> str:
     return repo_path.resolve().name
 
 
-def output_dir(repo_path: pathlib.Path, root: pathlib.Path = pathlib.Path("output")) -> pathlib.Path:
+def repo_name(target: pathlib.Path | str) -> str:
+    """The repository name alone — the segment both `repo/` and `output/` are keyed by."""
+    if isinstance(target, str) and is_url(target):
+        slug = parse_remote(target)
+        if not slug:
+            raise ValueError(f"cannot derive a repository name from {target!r}")
+        return slug.split("/")[-1]
+    return repo_slug(pathlib.Path(target)).split("/")[-1]
+
+
+def output_dir(target: pathlib.Path | str, root: pathlib.Path = pathlib.Path("output")) -> pathlib.Path:
     """Where every stage reads and writes for this target."""
-    return pathlib.Path(root).joinpath(*repo_slug(repo_path).split("/"))
+    return pathlib.Path(root) / repo_name(target)
 
 
-def display_name(repo_path: pathlib.Path) -> str:
-    """Just the repository name, for a report title."""
-    return repo_slug(repo_path).split("/")[-1]
+def clone_dir(target: pathlib.Path | str, root: pathlib.Path = pathlib.Path("repo")) -> pathlib.Path:
+    """Where a cloned target lives, mirroring the output naming."""
+    return pathlib.Path(root) / repo_name(target)
+
+
+def ensure_clone(url: str, dest: pathlib.Path) -> pathlib.Path:
+    """Shallow-clone `url` to `dest` if it is not already there. Returns `dest`."""
+    if (dest / ".git").is_dir():
+        return dest
+    if dest.exists() and any(dest.iterdir()):
+        raise SystemExit(f"{dest} exists and is not a git checkout — move it or pass an explicit --repo")
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"cloning {url} -> {dest}", flush=True)
+    result = subprocess.run(
+        ["git", "clone", "--depth", "1", "--single-branch", url, str(dest)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"clone failed:\n{result.stderr.strip()}")
+    return dest
+
+
+def resolve_target(target: pathlib.Path | str, clone_root: pathlib.Path = pathlib.Path("repo")) -> pathlib.Path:
+    """Accept a path or a URL; return a local checkout, cloning it if needed."""
+    if isinstance(target, str) and is_url(target):
+        return ensure_clone(target, clone_dir(target, clone_root))
+    return pathlib.Path(target)

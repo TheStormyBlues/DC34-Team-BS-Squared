@@ -1,23 +1,25 @@
 """BS-Squared threat modelling pipeline — run the whole chain.
 
-    python main.py --repo repo
-    python main.py --repo repo --dry-run          # deterministic parts only, no model calls
-    python main.py --repo repo --from stride      # resume without redoing stages 1 and 2
-    python main.py --repo repo --only report      # one stage
-    python main.py --repo repo --force            # re-run stages that already have output
+    python main.py --repo https://github.com/juice-shop/juice-shop.git   # clones if needed
+    python main.py --repo repo/juice-shop                                # existing checkout
+    python main.py --repo repo/juice-shop --dry-run   # deterministic parts only, no model calls
+    python main.py --repo repo/juice-shop --from stride   # resume, skipping stages 1 and 2
+    python main.py --repo repo/juice-shop --only report
+    python main.py --repo repo/juice-shop --force     # re-run stages that already have output
 
 Each stage reads and writes files under one directory, so the chain is the filesystem
 rather than anything passed in memory:
 
-    output/<owner>/<repo>/use-cases/<id>.json    stage 1  characterize
-    output/<owner>/<repo>/dfds/<id>.mmd          stage 2  data flow diagrams
-    output/<owner>/<repo>/threats/<id>.json      stage 3  STRIDE analysis
-    output/<owner>/<repo>/report.md              stage 4  the report
+    output/<repo>/use-cases/<id>.json    stage 1  characterize
+    output/<repo>/dfds/<id>.mmd          stage 2  data flow diagrams
+    output/<repo>/threats/<id>.json      stage 3  STRIDE analysis
+    output/<repo>/report.md              stage 4  the report
 
-Output is namespaced by the repository being scanned — resolved from its git remote,
-so `output/juice-shop/juice-shop/` rather than the local clone directory's arbitrary
-name. Several applications can then be analyzed without collision, and two people who
-cloned to different directory names produce the same path. See main/target.py.
+A target is keyed by its repository name in both places — a Juice Shop clone lives at
+`repo/juice-shop` and writes to `output/juice-shop`. The name comes from the git remote
+rather than the local directory, so two people who cloned differently still produce the
+same output path. Pass a URL to --repo and it is cloned on first use. See
+main/target.py.
 
 Stages are invoked through their own CLIs, so each keeps its own defaults — notably
 stage 1 runs an open-weight model with validated tools while the others run Claude.
@@ -35,7 +37,7 @@ import sys
 import time
 from typing import Callable
 
-from main.target import display_name, output_dir, repo_slug
+from main.target import output_dir, repo_name, repo_slug, resolve_target
 
 
 class Stage:
@@ -116,7 +118,7 @@ STAGES: list[Stage] = [
         title="Assemble the report",
         module="main.stage4_report",
         # Stage 4 is deterministic, so it runs even under --dry-run.
-        argv=lambda a, out: ["--output", str(out), "--target", a.target or display_name(a.repo)],
+        argv=lambda a, out: ["--output", str(out), "--target", a.target or repo_name(a.repo)],
         produces=_report_file,
         needs_model=False,
     ),
@@ -180,10 +182,10 @@ def main(argv: list[str] | None = None) -> int:
         description="Run the BS-Squared threat modelling pipeline end to end.",
         epilog="Stages: " + ", ".join(STAGE_KEYS),
     )
-    parser.add_argument("--repo", type=pathlib.Path, default=pathlib.Path("repo"),
-                        help="target application clone (default: ./repo)")
+    parser.add_argument("--repo", default="repo/juice-shop",
+                        help="target checkout, or a git URL to clone into repo/<repo name>")
     parser.add_argument("--output", type=pathlib.Path,
-                        help="output directory (default: output/<owner>/<repo> from the target's git remote)")
+                        help="output directory (default: output/<repo name>)")
     parser.add_argument("--target", help="application name for the report title (default: the repository name)")
     parser.add_argument("--from", dest="from_stage", choices=STAGE_KEYS, help="start at this stage")
     parser.add_argument("--only", choices=STAGE_KEYS, help="run just this stage")
@@ -192,15 +194,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="run only the deterministic parts of each stage; no model calls")
     args = parser.parse_args(argv)
 
+    # A URL is cloned to repo/<repo name>; a path is used as given.
+    args.repo = resolve_target(args.repo)
     if not args.repo.is_dir():
         raise SystemExit(
             f"target not found: {args.repo}\n"
-            f"  git clone --depth 1 https://github.com/juice-shop/juice-shop.git {args.repo}"
+            f"  pass a git URL to clone it, e.g. "
+            f"--repo https://github.com/juice-shop/juice-shop.git"
         )
 
-    # Namespaced by the repository being scanned, not by the local clone directory —
-    # main/target.py resolves that from the git remote. Stage 1 derives the same path,
-    # so running it standalone lands in the same place.
+    # Keyed by the repository name, resolved from the git remote rather than the local
+    # directory. Stage 1 derives the same path, so a standalone run lands in the same place.
     out_dir = args.output or output_dir(args.repo)
     out_dir.mkdir(parents=True, exist_ok=True)
 

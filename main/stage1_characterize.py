@@ -652,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
         "--out-dir",
         type=pathlib.Path,
         default=None,
-        help="defaults to output/<owner>/<repo>/ from the target's git remote, "
+        help="defaults to output/<repo name>/ from the target's git remote, "
         "so each target app gets its own folder",
     )
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
@@ -663,9 +663,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.out_dir is None:
-        # Namespaced by the repository being scanned, not the local clone directory,
-        # which is whatever the person cloning happened to type. main.py derives the
-        # same path, so standalone and orchestrated runs land in the same place.
+        # Keyed by the repository name from the git remote, not the local clone
+        # directory, which is whatever the person cloning happened to type. main.py
+        # derives the same path, so standalone and orchestrated runs match.
         from main.target import output_dir
 
         args.out_dir = output_dir(args.repo)

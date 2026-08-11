@@ -1,8 +1,8 @@
 # Worked example
 
 One target's complete output, in the layout every stage reads and writes. A real run
-lands in `output/<owner>/<repo>/` — resolved from the target's git remote, so a Juice
-Shop clone produces `output/juice-shop/juice-shop/`. This directory has the same shape
+lands in `output/<repo name>/` — resolved from the target's git remote, so a Juice Shop
+clone produces `output/juice-shop/`. This directory has the same shape
 under a name no real target will take.
 
 ```
@@ -21,7 +21,7 @@ It is a real target, not a mock — point the pipeline at it to smoke-test a sta
 without touching a live run:
 
 ```bash
-python -m main.stage3_stride --output output/_example --repo ../repo --dry-run
+python -m main.stage3_stride --output output/_example --dry-run
 python -m main.stage4_report --output output/_example
 ```
 
