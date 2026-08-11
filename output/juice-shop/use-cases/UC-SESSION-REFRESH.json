@@ -1,0 +1,11 @@
+{
+  "id": "UC-SESSION-REFRESH",
+  "name": "Session Refresh",
+  "description": "1. Client: Sends GET request to /rest/user/whoami to refresh session\n2. Authentication Handler: Verifies JWT token validity (routes/currentUser.ts)\n3. Authentication Handler: Returns user information if authenticated (routes/currentUser.ts)",
+  "entry_points": [
+    "GET /rest/user/whoami"
+  ],
+  "source_refs": [
+    "routes/currentUser.ts"
+  ]
+}

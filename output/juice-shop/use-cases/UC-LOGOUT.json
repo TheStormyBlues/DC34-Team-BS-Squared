@@ -1,0 +1,12 @@
+{
+  "id": "UC-LOGOUT",
+  "name": "User Logout",
+  "description": "1. Client: Sends GET request to /rest/user/whoami to check authentication status\n2. Authentication Handler: Checks if user is authenticated via JWT token (routes/currentUser.ts)\n3. Client: Clears JWT token from localStorage and cookie (frontend/src/app/navbar/navbar.component.ts)",
+  "entry_points": [
+    "GET /rest/user/whoami"
+  ],
+  "source_refs": [
+    "routes/currentUser.ts",
+    "frontend/src/app/navbar/navbar.component.ts"
+  ]
+}

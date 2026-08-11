@@ -1,0 +1,12 @@
+{
+  "id": "UC-SECURITY-QUESTION",
+  "name": "Security Question Retrieval",
+  "description": "1. Client: Sends GET request to /rest/user/security-question with user email\n2. Security Question Handler: Looks up user's security question in database (routes/securityQuestion.ts)\n3. Security Question Handler: Returns security question to client (routes/securityQuestion.ts)\n4. Client: Displays security question to user for password reset (frontend/src/app/forgot-password/forgot-password.component.ts)",
+  "entry_points": [
+    "GET /rest/user/security-question"
+  ],
+  "source_refs": [
+    "routes/securityQuestion.ts",
+    "frontend/src/app/forgot-password/forgot-password.component.ts"
+  ]
+}

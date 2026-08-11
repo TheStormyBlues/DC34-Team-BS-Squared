@@ -1,0 +1,12 @@
+{
+  "id": "UC-LOGIN",
+  "name": "User Login",
+  "description": "1. Client: Sends POST request to /rest/user/login with email and password\n2. Login Handler: Queries database for user with matching email and hashed password (routes/login.ts)\n3. Login Handler: Checks if user has TOTP secret set (routes/login.ts)\n4. Login Handler: If TOTP secret exists, returns temporary token for 2FA verification (routes/login.ts)\n5. Login Handler: If no TOTP secret, creates authenticated user session and returns JWT token (routes/login.ts)\n6. Client: Stores JWT token in localStorage and cookie (frontend/src/app/login/login.component.ts)",
+  "entry_points": [
+    "POST /rest/user/login"
+  ],
+  "source_refs": [
+    "routes/login.ts",
+    "frontend/src/app/login/login.component.ts"
+  ]
+}

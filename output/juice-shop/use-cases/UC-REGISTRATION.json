@@ -1,0 +1,12 @@
+{
+  "id": "UC-REGISTRATION",
+  "name": "User Registration",
+  "description": "1. Client: Sends POST request to /api/Users with user details including email, password, security question, and answer\n2. Registration Handler: Creates new user in database with hashed password (routes/authenticatedUsers.ts)\n3. Registration Handler: Saves security answer for password reset functionality (routes/authenticatedUsers.ts)\n4. Client: Redirects to login page after successful registration (frontend/src/app/register/register.component.ts)",
+  "entry_points": [
+    "POST /api/Users"
+  ],
+  "source_refs": [
+    "routes/authenticatedUsers.ts",
+    "frontend/src/app/register/register.component.ts"
+  ]
+}

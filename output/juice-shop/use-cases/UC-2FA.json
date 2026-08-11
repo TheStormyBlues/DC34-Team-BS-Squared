@@ -1,0 +1,14 @@
+{
+  "id": "UC-2FA",
+  "name": "Two-Factor Authentication",
+  "description": "1. Client: Sends GET request to /rest/2fa/status to check 2FA status\n2. 2FA Handler: Checks if user has 2FA enabled and returns setup information if not (routes/2fa.ts)\n3. Client: Sends POST request to /rest/2fa/setup with password, setup token, and initial TOTP token\n4. 2FA Handler: Validates password and setup token, verifies initial TOTP token (routes/2fa.ts)\n5. 2FA Handler: Updates user record with TOTP secret (routes/2fa.ts)\n6. Client: Sends POST request to /rest/2fa/verify with temp token and TOTP token\n7. 2FA Handler: Verifies TOTP token against user's secret (routes/2fa.ts)\n8. 2FA Handler: Returns final JWT token for authenticated session (routes/2fa.ts)",
+  "entry_points": [
+    "GET /rest/2fa/status",
+    "POST /rest/2fa/setup",
+    "POST /rest/2fa/verify"
+  ],
+  "source_refs": [
+    "routes/2fa.ts",
+    "frontend/src/app/two-factor-auth/two-factor-auth.component.ts"
+  ]
+}

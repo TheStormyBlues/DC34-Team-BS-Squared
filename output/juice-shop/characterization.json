@@ -1,0 +1,5 @@
+{
+  "app_name": "juice-shop",
+  "summary": "OWASP Juice Shop is a modern and sophisticated insecure web application designed for security training, awareness demos, Capture The Flag (CTF) events, and as a testbed for security tools. It contains vulnerabilities from the entire OWASP Top Ten list and many other security flaws found in real-world applications. The application simulates a typical e-commerce platform with features like user login, registration, password reset, and more.",
+  "goal": "The goal of OWASP Juice Shop is to serve as a deliberately vulnerable application for educational purposes, allowing users to practice web application security skills and learn about common vulnerabilities in a safe environment."
+}

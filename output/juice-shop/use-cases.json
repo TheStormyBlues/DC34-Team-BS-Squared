@@ -1,0 +1,114 @@
+{
+  "use_cases": [
+    {
+      "id": "UC-LOGIN",
+      "name": "User Login",
+      "description": "1. Client: Sends POST request to /rest/user/login with email and password\n2. Login Handler: Queries database for user with matching email and hashed password (routes/login.ts)\n3. Login Handler: Checks if user has TOTP secret set (routes/login.ts)\n4. Login Handler: If TOTP secret exists, returns temporary token for 2FA verification (routes/login.ts)\n5. Login Handler: If no TOTP secret, creates authenticated user session and returns JWT token (routes/login.ts)\n6. Client: Stores JWT token in localStorage and cookie (frontend/src/app/login/login.component.ts)",
+      "entry_points": [
+        "POST /rest/user/login"
+      ],
+      "source_refs": [
+        "routes/login.ts",
+        "frontend/src/app/login/login.component.ts"
+      ]
+    },
+    {
+      "id": "UC-REGISTRATION",
+      "name": "User Registration",
+      "description": "1. Client: Sends POST request to /api/Users with user details including email, password, security question, and answer\n2. Registration Handler: Creates new user in database with hashed password (routes/authenticatedUsers.ts)\n3. Registration Handler: Saves security answer for password reset functionality (routes/authenticatedUsers.ts)\n4. Client: Redirects to login page after successful registration (frontend/src/app/register/register.component.ts)",
+      "entry_points": [
+        "POST /api/Users"
+      ],
+      "source_refs": [
+        "routes/authenticatedUsers.ts",
+        "frontend/src/app/register/register.component.ts"
+      ]
+    },
+    {
+      "id": "UC-REGISTER",
+      "name": "User Registration",
+      "description": "1. Client: Sends POST request to /api/Users with user details including email, password, and password repeat\n2. Server: Validates registration inputs and checks for challenges like empty user registration (routes/verify.ts)\n3. Server: Creates new user in database with hashed password using finale-generated API (server.ts)\n4. Client: Redirects to login page after successful registration (frontend/src/app/register/register.component.ts)",
+      "entry_points": [
+        "POST /api/Users"
+      ],
+      "source_refs": [
+        "routes/verify.ts",
+        "server.ts",
+        "frontend/src/app/register/register.component.ts"
+      ]
+    },
+    {
+      "id": "UC-PASSWORD-RESET",
+      "name": "Password Reset",
+      "description": "1. Client: Sends POST request to /rest/user/reset-password with email, security answer, and new password\n2. Reset Handler: Verifies security answer against stored answer in database (routes/resetPassword.ts)\n3. Reset Handler: Updates user password with new hashed password (routes/resetPassword.ts)\n4. Client: Displays success message after password reset (frontend/src/app/forgot-password/forgot-password.component.ts)",
+      "entry_points": [
+        "POST /rest/user/reset-password"
+      ],
+      "source_refs": [
+        "routes/resetPassword.ts",
+        "frontend/src/app/forgot-password/forgot-password.component.ts"
+      ]
+    },
+    {
+      "id": "UC-2FA",
+      "name": "Two-Factor Authentication",
+      "description": "1. Client: Sends GET request to /rest/2fa/status to check 2FA status\n2. 2FA Handler: Checks if user has 2FA enabled and returns setup information if not (routes/2fa.ts)\n3. Client: Sends POST request to /rest/2fa/setup with password, setup token, and initial TOTP token\n4. 2FA Handler: Validates password and setup token, verifies initial TOTP token (routes/2fa.ts)\n5. 2FA Handler: Updates user record with TOTP secret (routes/2fa.ts)\n6. Client: Sends POST request to /rest/2fa/verify with temp token and TOTP token\n7. 2FA Handler: Verifies TOTP token against user's secret (routes/2fa.ts)\n8. 2FA Handler: Returns final JWT token for authenticated session (routes/2fa.ts)",
+      "entry_points": [
+        "GET /rest/2fa/status",
+        "POST /rest/2fa/setup",
+        "POST /rest/2fa/verify"
+      ],
+      "source_refs": [
+        "routes/2fa.ts",
+        "frontend/src/app/two-factor-auth/two-factor-auth.component.ts"
+      ]
+    },
+    {
+      "id": "UC-CHANGE-PASSWORD",
+      "name": "Change Password",
+      "description": "1. Client: Sends GET request to /rest/user/change-password with current and new passwords\n2. Change Password Handler: Verifies user is authenticated and validates current password (routes/changePassword.ts)\n3. Change Password Handler: Updates user password with new hashed password (routes/changePassword.ts)\n4. Client: Displays success message after password change (frontend/src/app/change-password/change-password.component.ts)",
+      "entry_points": [
+        "GET /rest/user/change-password"
+      ],
+      "source_refs": [
+        "routes/changePassword.ts",
+        "frontend/src/app/change-password/change-password.component.ts"
+      ]
+    },
+    {
+      "id": "UC-SECURITY-QUESTION",
+      "name": "Security Question Retrieval",
+      "description": "1. Client: Sends GET request to /rest/user/security-question with user email\n2. Security Question Handler: Looks up user's security question in database (routes/securityQuestion.ts)\n3. Security Question Handler: Returns security question to client (routes/securityQuestion.ts)\n4. Client: Displays security question to user for password reset (frontend/src/app/forgot-password/forgot-password.component.ts)",
+      "entry_points": [
+        "GET /rest/user/security-question"
+      ],
+      "source_refs": [
+        "routes/securityQuestion.ts",
+        "frontend/src/app/forgot-password/forgot-password.component.ts"
+      ]
+    },
+    {
+      "id": "UC-LOGOUT",
+      "name": "User Logout",
+      "description": "1. Client: Sends GET request to /rest/user/whoami to check authentication status\n2. Authentication Handler: Checks if user is authenticated via JWT token (routes/currentUser.ts)\n3. Client: Clears JWT token from localStorage and cookie (frontend/src/app/navbar/navbar.component.ts)",
+      "entry_points": [
+        "GET /rest/user/whoami"
+      ],
+      "source_refs": [
+        "routes/currentUser.ts",
+        "frontend/src/app/navbar/navbar.component.ts"
+      ]
+    },
+    {
+      "id": "UC-SESSION-REFRESH",
+      "name": "Session Refresh",
+      "description": "1. Client: Sends GET request to /rest/user/whoami to refresh session\n2. Authentication Handler: Verifies JWT token validity (routes/currentUser.ts)\n3. Authentication Handler: Returns user information if authenticated (routes/currentUser.ts)",
+      "entry_points": [
+        "GET /rest/user/whoami"
+      ],
+      "source_refs": [
+        "routes/currentUser.ts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "UC-REGISTER",
+  "name": "User Registration",
+  "description": "1. Client: Sends POST request to /api/Users with user details including email, password, and password repeat\n2. Server: Validates registration inputs and checks for challenges like empty user registration (routes/verify.ts)\n3. Server: Creates new user in database with hashed password using finale-generated API (server.ts)\n4. Client: Redirects to login page after successful registration (frontend/src/app/register/register.component.ts)",
+  "entry_points": [
+    "POST /api/Users"
+  ],
+  "source_refs": [
+    "routes/verify.ts",
+    "server.ts",
+    "frontend/src/app/register/register.component.ts"
+  ]
+}
