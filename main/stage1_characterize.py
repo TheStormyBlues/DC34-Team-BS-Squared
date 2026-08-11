@@ -60,6 +60,7 @@ import argparse
 import json
 import pathlib
 import re
+import time
 from typing import Any, Optional, Type
 
 from langchain_core.callbacks.manager import CallbackManagerForToolRun
@@ -69,6 +70,7 @@ from pydantic import BaseModel, Field
 DEFAULT_MODEL_ID = "qwen.qwen3-coder-30b-a3b-v1:0"
 DEFAULT_TEMPERATURE = 0.1
 DEFAULT_TAXONOMY_PATH = pathlib.Path(__file__).parent / "auth_taxonomy.json"
+DEFAULT_TIMEOUT_SECONDS = 300.0
 
 SKIP_DIRS = {
     "node_modules", ".git", "dist", "build", "coverage", "test", "tests", "spec", "__pycache__",
@@ -592,11 +594,21 @@ three tool calls above."""
     )
 
 
+def _summarize_tool_call(tool_call: dict[str, Any]) -> str:
+    """One short identifying arg for a log line — not the whole payload."""
+    args = tool_call.get("args", {}) or {}
+    for key in ("id", "name", "package_name"):
+        if args.get(key):
+            return str(args[key])
+    return ""
+
+
 def characterize(
     repo_path: pathlib.Path,
     package_json_path: pathlib.Path,
     model_id: str = DEFAULT_MODEL_ID,
     temperature: float = DEFAULT_TEMPERATURE,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     candidates = build_candidates(repo_path, package_json_path)
     metadata = read_app_metadata(package_json_path)
@@ -631,7 +643,49 @@ def characterize(
         + "\n\nFirst call submit_characterization once. Then review any heuristic dependencies. "
         "Then call submit_use_case once per authentication use case."
     )
-    agent.invoke({"messages": [{"role": "user", "content": task}]})
+    print(f"[stage1] starting agent run (time limit: {timeout_seconds:.0f}s)", flush=True)
+    start = time.monotonic()
+    tool_call_count = 0
+
+    try:
+        for event in agent.stream({"messages": [{"role": "user", "content": task}]}):
+            elapsed = time.monotonic() - start
+            if elapsed > timeout_seconds:
+                print(
+                    f"[stage1] [{elapsed:6.1f}s] time limit reached after {tool_call_count} tool call(s) "
+                    "— stopping and keeping whatever was already validated",
+                    flush=True,
+                )
+                break
+
+            for key, value in event.items():
+                if "Middleware" in key:
+                    continue
+                if not (isinstance(value, dict) and "messages" in value):
+                    continue
+                for msg in value["messages"]:
+                    for tc in getattr(msg, "tool_calls", None) or []:
+                        tool_call_count += 1
+                        detail = _summarize_tool_call(tc)
+                        print(
+                            f"[stage1] [{elapsed:6.1f}s] -> {tc['name']}"
+                            + (f"({detail})" if detail else ""),
+                            flush=True,
+                        )
+    except Exception as exc:  # noqa: BLE001 - keep whatever was already validated on any failure
+        print(
+            f"[stage1] [{time.monotonic() - start:6.1f}s] agent run raised {type(exc).__name__}: {exc} "
+            "— keeping whatever was already validated",
+            flush=True,
+        )
+
+    print(
+        f"[stage1] finished in {time.monotonic() - start:.1f}s: "
+        f"characterization {'recorded' if characterization_tool.accepted else 'MISSING'}, "
+        f"{len(dependency_review_tool.accepted)} dependency review(s), "
+        f"{len(use_case_tool.accepted)} use case(s)",
+        flush=True,
+    )
 
     # All three final JSON files are built here, from validated tool calls — never from agent prose.
     return {
@@ -658,6 +712,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
     parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help=f"wall-clock seconds to let the agent keep calling tools before stopping and keeping "
+        f"whatever was already validated (default: {DEFAULT_TIMEOUT_SECONDS:.0f})",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print the deterministic scan and the exact model prompt, call nothing"
     )
     args = parser.parse_args(argv)
@@ -677,7 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         print(render_candidates(candidates))
         return 0
 
-    result = characterize(args.repo, package_json_path, args.model_id, args.temperature)
+    result = characterize(args.repo, package_json_path, args.model_id, args.temperature, args.timeout)
     use_cases_doc = result["use_cases"]  # {"use_cases": [...]} — the contract stage3_stride.py reads
     characterization_doc = result["characterization"]
     dependency_review_doc = {"dependency_review": result["dependency_review"]}
