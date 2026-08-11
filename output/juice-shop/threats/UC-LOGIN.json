@@ -1,5 +1,421 @@
 {
   "use_case_id": "UC-LOGIN",
   "name": "User Login",
-  "threats": []
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-S-001",
+      "stride": "S",
+      "title": "SQL injection enables authentication bypass in login query",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login query is constructed by string concatenation with user-supplied email and password, allowing SQL injection attacks to bypass authentication. An attacker can inject SQL syntax (e.g., ' OR 1=1--) to authenticate as any user without knowing their password.",
+      "attack_scenario": "An attacker sends a POST request to /rest/user/login with email set to \"admin@juice-sh.op' --\" and any password. The injected SQL comment bypasses the password check, and the attacker is authenticated as the admin user.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-89",
+        "CWE-287",
+        "CWE-290"
+      ],
+      "recommendation": "Use parameterized queries instead of string concatenation. Replace the raw SQL query with Sequelize's built-in findOne method: await UserModel.findOne({ where: { email: req.body.email, password: security.hash(req.body.password), deletedAt: null } })"
+    },
+    {
+      "id": "T-UC-LOGIN-S-002",
+      "stride": "S",
+      "title": "Credential stuffing attack via unthrottled login endpoint",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The /rest/user/login endpoint has no rate limiting, throttling, lockout mechanism, or CAPTCHA protection. An attacker can perform unlimited login attempts using a corpus of breached credentials, enabling credential stuffing attacks to compromise user accounts.",
+      "attack_scenario": "An attacker uses a tool to send thousands of login requests per second with email/password pairs from a known breach. Without rate limiting, the attacker can test thousands of credentials in minutes and identify valid accounts.",
+      "evidence": [
+        {
+          "file": "server.ts",
+          "line": 615,
+          "snippet": "app.post('/rest/user/login', login())"
+        },
+        {
+          "file": "server.ts",
+          "line": 362,
+          "snippet": "app.use('/rest/user/reset-password', rateLimit({ windowMs: 5 * 60 * 1000, max: 100, keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } }))"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-307",
+        "CWE-640"
+      ],
+      "recommendation": "Apply rate limiting middleware to the login endpoint. Example: app.post('/rest/user/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: ({ headers, ip }) => headers['X-Forwarded-For'] ?? ip }), login()). Consider also implementing account lockout after N failed attempts and CAPTCHA challenges."
+    },
+    {
+      "id": "T-UC-LOGIN-T-001",
+      "stride": "T",
+      "title": "SQL Injection in login query allows tampering with authentication",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login handler constructs a SQL query using string concatenation with user-supplied email and password, allowing an attacker to inject SQL that modifies the WHERE clause. An attacker could inject SQL to bypass password checks or modify the query logic to authenticate as any user.",
+      "attack_scenario": "An attacker submits email: admin@juice-sh.op' OR '1'='1 and any password. The resulting query becomes SELECT * FROM Users WHERE email = 'admin@juice-sh.op' OR '1'='1' AND password = '...' which returns the admin user regardless of password, allowing authentication bypass and session hijacking.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-89"
+      ],
+      "recommendation": "Use parameterized queries or prepared statements. Replace the string concatenation with sequelize's parameterized query API: models.sequelize.query('SELECT * FROM Users WHERE email = ? AND password = ? AND deletedAt IS NULL', { replacements: [req.body.email, security.hash(req.body.password)], model: UserModel, plain: true })"
+    },
+    {
+      "id": "T-UC-LOGIN-T-002",
+      "stride": "T",
+      "title": "JWT token transmitted in response can be intercepted and tampered with",
+      "dfd_element": {
+        "name": "Create authenticated user session and return JWT token if no TOTP",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The JWT token is returned in the response to the client without encryption. While JWT is signed, if transmitted over unencrypted channels or if the signing key is compromised, an attacker could tamper with the token claims.",
+      "attack_scenario": "An attacker performing a man-in-the-middle attack intercepts the JWT token response. If the connection is not properly secured with TLS, the attacker could read or modify the token before it reaches the client.",
+      "evidence": [],
+      "existing_mitigations": [
+        "JWT is signed with RS256 algorithm"
+      ],
+      "status": "partial",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Ensure all communication is over HTTPS/TLS. Verify that the JWT signing key is properly protected and rotated regularly. Consider using short-lived tokens with refresh token rotation."
+    },
+    {
+      "id": "T-UC-LOGIN-T-003",
+      "stride": "T",
+      "title": "Temporary 2FA token transmitted in response can be tampered with",
+      "dfd_element": {
+        "name": "Return temporary token for 2FA verification if TOTP secret exists",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The temporary token for 2FA verification is returned in the response without encryption. An attacker could intercept and tamper with this token if the connection is not properly secured.",
+      "attack_scenario": "An attacker performing a man-in-the-middle attack intercepts the temporary 2FA token. If the token format is predictable or the server does not properly validate it, the attacker could modify it to bypass 2FA verification.",
+      "evidence": [],
+      "existing_mitigations": [
+        "Temporary token is signed with RS256"
+      ],
+      "status": "partial",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Ensure all communication is over HTTPS/TLS. Use short expiration times for temporary tokens. Validate token signature and expiration on every 2FA verification attempt."
+    },
+    {
+      "id": "T-UC-LOGIN-T-004",
+      "stride": "T",
+      "title": "Database query results can be tampered with if database connection is compromised",
+      "dfd_element": {
+        "name": "Return user data",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Database \u2192 Application Server",
+      "description": "User data returned from the database could be tampered with if the database connection is not properly secured or if an attacker gains access to the database layer.",
+      "attack_scenario": "An attacker with network access to the database connection could perform a man-in-the-middle attack to modify the user data in transit, potentially returning false authentication results or modified user credentials.",
+      "evidence": [],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "low",
+      "impact": "high",
+      "risk": "medium",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Use encrypted connections (SSL/TLS) for all database communications. Implement network segmentation to restrict database access. Use connection pooling with proper authentication."
+    },
+    {
+      "id": "T-UC-LOGIN-R-001",
+      "stride": "R",
+      "title": "No audit logging of authentication events",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The Login Handler processes authentication requests but produces no durable, attributable record of login attempts, outcomes, or token issuance. Both successful and failed login attempts complete without logging, making it impossible to detect account takeovers, brute force attacks, or unauthorized access after the fact. An attacker can authenticate with stolen credentials, change the account email, and drain the account while leaving no audit trail.",
+      "attack_scenario": "An attacker obtains a user's credentials through phishing or a data breach. They authenticate successfully via POST /rest/user/login. The application returns a JWT token but logs nothing. The attacker then changes the account email and transfers funds. When the legitimate user discovers the compromise weeks later, there is no login record, no timestamp, no source IP, and no way to determine when access began or what actions the attacker performed.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 35,
+          "snippet": "const user = utils.queryResultToJson(authenticatedUser)"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 50,
+          "snippet": "res.status(401).send(res.__('Invalid email or password.'))"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 24,
+          "snippet": "const token = security.authorize(authenticatedUser)"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-778",
+        "CWE-223"
+      ],
+      "recommendation": "Implement structured logging for all authentication events. Log both successful and failed login attempts with the following attributes: event type (auth.login), outcome (success/failure), reason for failure (bad_credentials, account_locked, etc. \u2014 never the password), user ID or email (redacted), source IP address, user agent, server-generated UTC timestamp, and request ID. Ship logs to an append-only sink that the application cannot modify or delete. Example: logger.info({ event: 'auth.login', outcome: success ? 'success' : 'failure', reason: success ? undefined : 'bad_credentials', userId: user?.id ?? null, email: redact(req.body.email), sourceIp: req.ip, userAgent: req.get('user-agent'), timestamp: new Date().toISOString(), requestId: req.id })"
+    },
+    {
+      "id": "T-UC-LOGIN-R-002",
+      "stride": "R",
+      "title": "No logging of TOTP token issuance and 2FA verification",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "When a user has TOTP enabled, the Login Handler issues a temporary token for 2FA verification (line 38-46) but produces no record of this event. Similarly, the 2FA verification process (routes/2fa.ts) completes without logging. This prevents detection of 2FA bypass attempts, token reuse, or compromise of the temporary token.",
+      "attack_scenario": "An attacker obtains a user's password and email. They authenticate and receive a temporary 2FA token. The attacker attempts to use this token multiple times or attempts to bypass 2FA verification. Without logs, there is no record of the failed 2FA attempts, the token issuance, or the eventual successful verification. If the attacker succeeds, the legitimate user has no way to know their account was compromised.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 37,
+          "snippet": "if (user.data?.id && user.data.totpSecret !== '') {"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 41,
+          "snippet": "tmpToken: security.authorize({"
+        },
+        {
+          "file": "routes/2fa.ts",
+          "line": 31,
+          "snippet": "const isValid = verifySync({ secret: user.totpSecret, token: totpToken, epochTolerance: 30 }).valid"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-778",
+        "CWE-223"
+      ],
+      "recommendation": "Log all 2FA-related events: temporary token issuance, 2FA verification attempts (both success and failure), and final authentication completion. Include user ID, source IP, timestamp, and the outcome. Example: logger.info({ event: 'auth.totp_token_issued', userId: user.id, sourceIp: req.ip, timestamp: new Date().toISOString() }) and logger.info({ event: 'auth.totp_verification', outcome: isValid ? 'success' : 'failure', userId: user.id, sourceIp: req.ip, timestamp: new Date().toISOString() })"
+    },
+    {
+      "id": "T-UC-LOGIN-I-001",
+      "stride": "I",
+      "title": "Return user email in authentication response",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The login response includes the user's email address in the response body. This confirms account existence and could enable account enumeration attacks.",
+      "attack_scenario": "An attacker performs account enumeration by attempting login with a list of email addresses. By observing the response structure, they can determine which accounts exist in the system.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 26,
+          "snippet": "res.json({ authentication: { token, bid: basket.id, umail: user.email } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "medium",
+      "risk": "medium",
+      "confidence": "high",
+      "cwe": [
+        "CWE-204",
+        "CWE-200"
+      ],
+      "recommendation": "Remove the umail field from the authentication response. Return only the token and basket ID."
+    },
+    {
+      "id": "T-UC-LOGIN-I-002",
+      "stride": "I",
+      "title": "Temporary 2FA token returned in response without encryption",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "When a user has TOTP enabled, a temporary token is returned in the response body. This token could be intercepted or leaked, allowing an attacker to bypass the first factor of authentication.",
+      "attack_scenario": "An attacker intercepts the login response and extracts the temporary token. They then use this token to access the 2FA verification endpoint.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 38,
+          "snippet": "res.status(401).json({ status: 'totp_token_required', data: { tmpToken: security.authorize({ userId: user.data.id, type: 'password_valid_needs_second_factor_token' }) } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "medium",
+      "cwe": [
+        "CWE-522",
+        "CWE-200"
+      ],
+      "recommendation": "Return the temporary token in an HttpOnly, Secure, SameSite cookie instead of in the response body. Ensure the token has a short expiration time."
+    },
+    {
+      "id": "T-UC-LOGIN-I-003",
+      "stride": "I",
+      "title": "JWT token transmitted in response without encryption requirement",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The JWT token is returned in the response body without explicit encryption. If the response is transmitted over an unencrypted channel or intercepted, the token could be exposed.",
+      "attack_scenario": "An attacker intercepts the login response over an unencrypted connection and extracts the JWT token, then uses it to make authenticated requests as the victim.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 26,
+          "snippet": "res.json({ authentication: { token, bid: basket.id, umail: user.email } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "low",
+      "impact": "high",
+      "risk": "medium",
+      "confidence": "low",
+      "cwe": [
+        "CWE-522"
+      ],
+      "recommendation": "Ensure all authentication responses are transmitted over HTTPS with strict transport security headers. Return the token in an HttpOnly cookie instead of the response body."
+    },
+    {
+      "id": "T-UC-LOGIN-D-001",
+      "stride": "D",
+      "title": "Unbounded password hashing on unauthenticated login endpoint",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The /rest/user/login endpoint performs expensive bcrypt password hashing on every unauthenticated request without rate limiting. An attacker can send concurrent login requests with arbitrary passwords to exhaust CPU resources and degrade service availability for all users.",
+      "attack_scenario": "An attacker sends hundreds of concurrent POST requests to /rest/user/login with different email addresses and passwords. Each request triggers bcrypt hashing at cost factor 12 (approximately 100ms of CPU per request). Within seconds, the CPU pool is saturated and the application becomes unresponsive to legitimate login attempts and other requests.",
+      "evidence": [
+        {
+          "file": "server.ts",
+          "line": 615,
+          "snippet": "app.post('/rest/user/login', login())"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        },
+        {
+          "file": "server.ts",
+          "line": 362,
+          "snippet": "app.use('/rest/user/reset-password', rateLimit({"
+        }
+      ],
+      "existing_mitigations": [
+        "Rate limiting is applied to /rest/user/reset-password and /rest/2fa/verify endpoints, demonstrating the application has rate-limiting capability"
+      ],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-770",
+        "CWE-405",
+        "CWE-400"
+      ],
+      "recommendation": "Apply rate limiting to the /rest/user/login endpoint using express-rate-limit middleware. Implement layered limits: per-source-IP limit (e.g., 100 requests per 15 minutes) to protect against botnets, and per-email limit (e.g., 5 failed attempts per 15 minutes) to prevent account lockout weaponization. Example: app.post('/rest/user/login', rateLimit({ windowMs: 15 * 60_000, max: 100, keyGenerator: r => r.ip }), rateLimit({ windowMs: 15 * 60_000, max: 5, keyGenerator: r => r.body.email }), login())"
+    },
+    {
+      "id": "T-UC-LOGIN-D-002",
+      "stride": "D",
+      "title": "Unbounded password input length enables CPU exhaustion",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login endpoint accepts passwords of arbitrary length with no validation constraint. An attacker can submit multi-megabyte passwords that consume CPU and memory proportional to the input size when passed to bcrypt hashing, amplifying the resource exhaustion attack.",
+      "attack_scenario": "An attacker sends a POST request to /rest/user/login with a password field containing a multi-megabyte string. The bcrypt hashing operation consumes CPU and memory proportional to the input size, potentially causing the server to run out of memory or become unresponsive faster than with normal-length passwords.",
+      "evidence": [
+        {
+          "file": "frontend/src/app/login/login.component.ts",
+          "line": 53,
+          "snippet": "public passwordControl = new UntypedFormControl('', [Validators.required, Validators.minLength(1)])"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "high",
+      "cwe": [
+        "CWE-770",
+        "CWE-400"
+      ],
+      "recommendation": "Enforce a maximum password length before the password reaches the hashing function. Add validation in the login handler to reject passwords longer than 128 characters (or an appropriate limit for your application). Example: if (typeof password !== 'string' || password.length > 128) { return res.status(400).json({ error: 'Invalid email or password' }) }"
+    }
+  ]
 }
