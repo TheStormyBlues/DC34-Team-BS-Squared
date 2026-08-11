@@ -21,19 +21,16 @@ MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 @pytest.fixture
 def records(tmp_path: pathlib.Path) -> list[dict]:
     """A one-use-case output tree, built from the shipped examples."""
-    examples = ROOT / "output"
+    examples = ROOT / "output" / "_example"
     for sub in ("use-cases", "dfds", "threats"):
         (tmp_path / sub).mkdir()
 
-    use_case = json.loads((examples / "use-cases" / "_example.json").read_text())
-    use_case["id"] = "UC-LOGIN"
+    use_case = json.loads((examples / "use-cases" / "UC-LOGIN.json").read_text())
     (tmp_path / "use-cases" / "UC-LOGIN.json").write_text(json.dumps(use_case))
-    (tmp_path / "dfds" / "UC-LOGIN.mmd").write_text((examples / "dfds" / "_example.mmd").read_text())
+    (tmp_path / "dfds" / "UC-LOGIN.mmd").write_text((examples / "dfds" / "UC-LOGIN.mmd").read_text())
 
-    merged = json.loads((examples / "threats" / "_example.json").read_text())
+    merged = json.loads((examples / "threats" / "UC-LOGIN.json").read_text())
     merged["use_case_id"] = "UC-LOGIN"
-    for threat in merged["threats"]:
-        threat["id"] = threat["id"].replace("_example", "UC-LOGIN")
     (tmp_path / "threats" / "UC-LOGIN.json").write_text(json.dumps(merged))
 
     return load_stage_outputs(tmp_path)

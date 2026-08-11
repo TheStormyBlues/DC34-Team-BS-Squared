@@ -19,10 +19,10 @@ its own error list and retried, so one bad generation does not cost the run.
 
 Reads and writes the shared output layout:
 
-    output/use-cases/<id>.json    stage 1 — name, description, entry points
-    output/dfds/<id>.mmd          stage 2 — the Mermaid diagram
-    output/threats/<id>/<L>.json  one file per agent call, the cache unit
-    output/threats/<id>.json      merged per use case — what stage 4 reads
+    <output>/use-cases/<id>.json    stage 1 — name, description, entry points
+    <output>/dfds/<id>.mmd          stage 2 — the Mermaid diagram
+    <output>/threats/<id>/<L>.json  one file per agent call, the cache unit
+    <output>/threats/<id>.json      merged per use case — what stage 4 reads
 
 Results are cached per call: an existing per-letter file is skipped unless --force.
 That matters when you are iterating on one letter and do not want to pay for the
@@ -77,8 +77,8 @@ markdown fence."""
 def load_use_cases(output_root: pathlib.Path) -> list[dict[str, Any]]:
     """Read stage 1 and stage 2 output from the shared layout.
 
-        output/use-cases/<id>.json    stage 1 — name, description, entry points
-        output/dfds/<id>.mmd          stage 2 — the Mermaid diagram
+        <output>/use-cases/<id>.json    stage 1 — name, description, entry points
+        <output>/dfds/<id>.mmd          stage 2 — the Mermaid diagram
 
     The file stem is the use case id, so the two stages never have to agree on
     anything but a filename. Files whose name starts with `_` are skipped, which is

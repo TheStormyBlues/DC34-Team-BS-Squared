@@ -2,10 +2,10 @@
 
 Reads everything the earlier stages wrote and produces one markdown document:
 
-    output/use-cases/<id>.json    what was analyzed
-    output/dfds/<id>.mmd          inlined as mermaid fences, so the report carries the DFDs
-    output/threats/<id>.json      the findings
-                                → output/report.md
+    <output>/use-cases/<id>.json    what was analyzed
+    <output>/dfds/<id>.mmd          inlined as mermaid fences, so the report carries the DFDs
+    <output>/threats/<id>.json      the findings
+                                → <output>/report.md
 
 Deliberately deterministic — no LLM call, so the same inputs always produce the same
 report. That is what makes the consistency claim in the report honest, and it means

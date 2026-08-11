@@ -26,22 +26,22 @@ import sys
 DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_TEMPERATURE = 0.3
 
-SYSTEM_PROMPT = """You answer questions about a threat model that has already been \
-produced. You are a reference over its output, not a new analysis.
+SYSTEM_PROMPT_TEMPLATE = """You answer questions about a threat model that has already \
+been produced. You are a reference over its output, not a new analysis.
 
 ## Your corpus
 
-Everything is on your filesystem, under `output/`:
+Everything is on your filesystem, under `{corpus}/`:
 
-- `output/report.md` — the assembled report. Start here for anything general; it has the
-  severity counts, the STRIDE coverage table, and the method.
-- `output/threats/<use-case-id>.json` — every threat for one use case, all six STRIDE
+- `{corpus}/report.md` — the assembled report. Start here for anything general; it has
+  the severity counts, the STRIDE coverage table, and the method.
+- `{corpus}/threats/<use-case-id>.json` — every threat for one use case, all six STRIDE
   categories merged. This is the authoritative detail.
-- `output/threats/<use-case-id>/<LETTER>.json` — the same threats split by category.
-- `output/use-cases/<use-case-id>.json` — what each use case is.
-- `output/dfds/<use-case-id>.mmd` — the data flow diagram, in Mermaid.
+- `{corpus}/threats/<use-case-id>/<LETTER>.json` — the same threats split by category.
+- `{corpus}/use-cases/<use-case-id>.json` — what each use case is.
+- `{corpus}/dfds/<use-case-id>.mmd` — the data flow diagram, in Mermaid.
 
-Files whose name begins with `_` are format examples, not real analysis. Never cite them.
+Anything under `output/_example/` is a format example, not real analysis. Never cite it.
 
 If a target application clone is present in the working directory, you may read it to
 show the code behind a finding.
@@ -54,7 +54,7 @@ Cite specifically. Every claim about a threat carries its id, like `T-UC-LOGIN-S
 Every claim about code carries a file and line. A reader must be able to check you.
 
 Say when you do not know. If the corpus does not contain the answer, say so plainly and
-name what would be needed. Never infer a threat that is not in `output/threats/`, never
+name what would be needed. Never infer a threat that is not in `{corpus}/threats/`, never
 invent a file path or a line number, and never upgrade a low-confidence finding into a
 certainty. Declining is a correct answer.
 
@@ -73,7 +73,7 @@ Be direct and brief. A specific answer with two citations beats a survey. Use pr
 reach for a table only when comparing several threats."""
 
 
-def build_agent(root: pathlib.Path, model_id: str, temperature: float):
+def build_agent(root: pathlib.Path, corpus: str, model_id: str, temperature: float):
     """Imported lazily so --help works without the course venv."""
     from deepagents import create_deep_agent
     from deepagents.backends import FilesystemBackend
@@ -84,7 +84,7 @@ def build_agent(root: pathlib.Path, model_id: str, temperature: float):
         model=ChatBedrockConverse(model_id=model_id, temperature=temperature),
         tools=[],
         backend=FilesystemBackend(root_dir=str(root), virtual_mode=False),
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT_TEMPLATE.format(corpus=corpus),
         checkpointer=MemorySaver(),  # keeps the thread across turns
     )
 
@@ -157,7 +157,13 @@ def main(argv: list[str] | None = None) -> int:
             root = pathlib.Path(os.path.commonpath([root, repo]))
             print(f"widening filesystem root to {root} to cover the target clone", file=sys.stderr)
 
-    agent = build_agent(root, args.model_id, args.temperature)
+    # The prompt names the corpus by its path relative to the agent's filesystem root,
+    # which is what its read tools will actually accept.
+    try:
+        corpus = args.output.resolve().relative_to(root).as_posix()
+    except ValueError:
+        corpus = args.output.as_posix()
+    agent = build_agent(root, corpus, args.model_id, args.temperature)
 
     if args.ask:
         print(ask(agent, args.ask, show_tools=not args.quiet))

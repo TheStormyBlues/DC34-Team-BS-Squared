@@ -238,8 +238,8 @@ def test_coverage_table_counts_per_letter(blob):
 
 def test_per_letter_output_conforms():
     """Validate every per-letter file stage 3 has written, plus the shipped example."""
-    threats_root = ROOT / "output" / "threats"
-    files = sorted(threats_root.glob("*/*.json")) if threats_root.is_dir() else []
+    output = ROOT / "output"
+    files = sorted(output.glob("*/**/threats/*/*.json")) if output.is_dir() else []
     if not files:
         pytest.skip("no stage 3 output yet — run the pipeline first")
     for path in files:
@@ -250,8 +250,8 @@ def test_per_letter_output_conforms():
 
 def test_merged_output_conforms():
     """The per-use-case files stage 4 reads must hold well-formed, unique threats."""
-    threats_root = ROOT / "output" / "threats"
-    files = sorted(threats_root.glob("*.json")) if threats_root.is_dir() else []
+    output = ROOT / "output"
+    files = sorted(output.glob("*/**/threats/*.json")) if output.is_dir() else []
     if not files:
         pytest.skip("no stage 3 output yet — run the pipeline first")
     for path in files:

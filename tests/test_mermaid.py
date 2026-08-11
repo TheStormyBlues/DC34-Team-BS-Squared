@@ -208,12 +208,12 @@ def test_ordinary_comments_are_ignored():
 
 # --- the shipped examples ---------------------------------------------------
 
-EXAMPLES = ROOT / "output"
+EXAMPLE = ROOT / "output" / "_example"
 
 
 def test_example_diagram_parses_cleanly():
     """The file teammates copy must itself be exemplary."""
-    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    parsed = parse_mermaid((EXAMPLE / "dfds" / "UC-LOGIN.mmd").read_text())
     assert parsed["warnings"] == [], parsed["warnings"]
     assert parsed["processes"], "no processes — Elevation of Privilege would return nothing"
     assert parsed["external_entities"], "no external entities — Spoofing coverage would be thin"
@@ -221,7 +221,7 @@ def test_example_diagram_parses_cleanly():
 
 
 def test_example_diagram_hints_resolve_to_real_node_ids():
-    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    parsed = parse_mermaid((EXAMPLE / "dfds" / "UC-LOGIN.mmd").read_text())
     ids = {e["id"] for g in ("external_entities", "processes", "data_stores") for e in parsed[g]}
     for hinted in parsed["file_hints"]:
         assert hinted in ids, f"file hint {hinted!r} is not a node id ({sorted(ids)})"
@@ -229,6 +229,6 @@ def test_example_diagram_hints_resolve_to_real_node_ids():
 
 def test_example_header_comments_are_not_parsed_as_elements():
     """The example carries a long `%%` preamble; none of it may become an element."""
-    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    parsed = parse_mermaid((EXAMPLE / "dfds" / "UC-LOGIN.mmd").read_text())
     assert len(parsed["external_entities"]) == 1
     assert [e["name"] for e in parsed["processes"]] == ["Login Handler", "Token Issuer"]

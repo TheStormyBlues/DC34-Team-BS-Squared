@@ -27,9 +27,9 @@ stem: stage 2 writes `dfds/UC-LOGIN.mmd` because stage 1 wrote
 filename rather than guessing which is right. Ids must be filesystem-safe — no slashes
 or spaces. Convention: `UC-SCREAMING-KEBAB`.
 
-**Files starting with `_` are skipped.** Each directory ships an `_example` artifact
-showing its shape; they sit alongside real output without ever being analyzed. Copy one
-to start.
+**A worked example lives at [`output/_example/`](../output/_example/)** — one target's
+complete output in this exact layout, with each file documenting its own contract. Point
+a stage at it (`--output output/_example`) to smoke-test without touching a live run.
 
 ---
 
@@ -39,7 +39,7 @@ Scope is **authentication**, so aim for the handful of flows that decide who som
 is: sign-in, registration, password reset, token refresh, logout, MFA enrollment, OAuth
 callback. Six to eight is plenty; each one costs six agent calls downstream.
 
-One file per use case. See [`output/use-cases/_example.json`](../output/use-cases/_example.json).
+One file per use case. See [`output/_example/use-cases/UC-LOGIN.json`](../output/_example/use-cases/UC-LOGIN.json).
 
 ```json
 {
@@ -70,7 +70,7 @@ Treat stage 1 output as incomplete input.
 ## Stage 2 → `output/dfds/<id>.mmd`
 
 A Mermaid flowchart, one file per use case, named to match the stem in `use-cases/`.
-See [`output/dfds/_example.mmd`](../output/dfds/_example.mmd).
+See [`output/_example/dfds/UC-LOGIN.mmd`](../output/_example/dfds/UC-LOGIN.mmd).
 
 ```mermaid
 flowchart LR
@@ -173,11 +173,11 @@ Server boundary" appears in the output. Name boundaries for the crossing, not th
 
 Stage 3 makes one agent call per use case per letter and writes each to
 `threats/<id>/<LETTER>.json` — see
-[`output/threats/_example/S.json`](../output/threats/_example/S.json). An existing file
+[`output/_example/threats/UC-LOGIN/S.json`](../output/_example/threats/UC-LOGIN/S.json). An existing file
 is skipped unless `--force`, so re-running one letter costs one call rather than six.
 
 It then merges all six into `threats/<id>.json` — see
-[`output/threats/_example.json`](../output/threats/_example.json). **Stage 4 reads only
+[`output/_example/threats/UC-LOGIN.json`](../output/_example/threats/UC-LOGIN.json). **Stage 4 reads only
 the merged file**; the per-letter directory is stage 3's working state.
 
 Each threat carries `id`, `stride`, `title`, `dfd_element`, `trust_boundary`,
