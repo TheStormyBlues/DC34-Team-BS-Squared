@@ -269,7 +269,10 @@ def render_method(model_id: str, records: list[dict[str, Any]]) -> str:
 
 def generate_summary(records: list[dict[str, Any]], all_threats: list[dict[str, Any]], model_id: str) -> str:
     """Optional LLM executive summary. Everything else in the report is deterministic."""
+    from dotenv import load_dotenv
     from langchain_aws import ChatBedrockConverse
+
+    load_dotenv()  # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
 
     top = sorted(all_threats, key=sort_key)[:12]
     digest = "\n".join(

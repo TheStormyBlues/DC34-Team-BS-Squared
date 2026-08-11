@@ -77,8 +77,11 @@ def build_agent(root: pathlib.Path, corpus: str, model_id: str, temperature: flo
     """Imported lazily so --help works without the course venv."""
     from deepagents import create_deep_agent
     from deepagents.backends import FilesystemBackend
+    from dotenv import load_dotenv
     from langchain_aws import ChatBedrockConverse
     from langgraph.checkpoint.memory import MemorySaver
+
+    load_dotenv()  # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
 
     return create_deep_agent(
         model=ChatBedrockConverse(model_id=model_id, temperature=temperature),

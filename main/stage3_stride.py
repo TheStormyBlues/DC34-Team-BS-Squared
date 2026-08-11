@@ -224,14 +224,20 @@ def build_agent(skill_dir: pathlib.Path, repo: pathlib.Path, model_id: str, temp
     """Imported lazily so --dry-run works without the course venv."""
     from deepagents import create_deep_agent
     from deepagents.backends import FilesystemBackend
+    from dotenv import load_dotenv
     from langchain_aws import ChatBedrockConverse
+
+    load_dotenv()  # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
 
     return create_deep_agent(
         model=ChatBedrockConverse(model_id=model_id, temperature=temperature),
         tools=[],
         backend=FilesystemBackend(root_dir=str(repo), virtual_mode=False),
         system_prompt=SYSTEM_PROMPT,
-        skills=[str(skill_dir)],  # exactly one skill — this is what forces single-letter focus
+        # Absolute: deepagents resolves a skills path against the backend root
+        # (the target clone), not the working directory, so a relative path silently
+        # fails to load and the agent runs with no skill at all.
+        skills=[str(skill_dir.resolve())],  # exactly one skill — forces single-letter focus
     )
 
 
@@ -268,6 +274,22 @@ def invoke_with_backoff(agent, messages: list[dict[str, str]]) -> Any:
     raise RuntimeError("unreachable")
 
 
+def relativize_evidence(blob: dict[str, Any], repo: pathlib.Path) -> dict[str, Any]:
+    """Make evidence paths repo-relative.
+
+    The agent's filesystem tools hand it absolute paths, so that is what it cites.
+    An absolute path from someone else's machine is noise in a report and useless to
+    a reader, so strip the clone prefix.
+    """
+    root = str(repo.resolve())
+    for threat in blob.get("threats", []):
+        for item in threat.get("evidence") or []:
+            path = str(item.get("file", ""))
+            if path.startswith(root):
+                item["file"] = path[len(root):].lstrip("/\\")
+    return blob
+
+
 def run_one(
     use_case: dict[str, Any],
     letter: str,
@@ -288,7 +310,7 @@ def run_one(
             blob = parse_agent_json(raw)
             errors = validate_skill_output(blob, expected_letter=letter, expected_use_case=use_case["id"])
             if not errors:
-                return blob
+                return relativize_evidence(blob, repo)
             last_errors = errors
         except AgentOutputError as exc:
             last_errors = [str(exc)]
