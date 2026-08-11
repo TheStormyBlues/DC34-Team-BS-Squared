@@ -6,7 +6,8 @@ shapes; stages 1 and 2 own producing them.
 ```
 output/<repo>/
   use-cases/<id>.json      stage 1 — name, description, entry points
-  dfds/<id>.mmd            stage 2 — the Mermaid diagram
+  graphs/<id>.json         stage 2 — the typed node/edge graph
+  dfds/<id>.mmd            stage 2 — the Mermaid diagram, rendered from the graph
   threats/<id>/<L>.json    stage 3 — one file per agent call, the cache unit
   threats/<id>.json        stage 3 — merged per use case, what stage 4 reads
   report.md                stage 4 — the deliverable, and the chatbot's corpus
@@ -67,7 +68,16 @@ Treat stage 1 output as incomplete input.
 
 ---
 
-## Stage 2 → `output/dfds/<id>.mmd`
+## Stage 2 → `<output>/graphs/<id>.json` and `<output>/dfds/<id>.mmd`
+
+Stage 2 runs in two chained phases, each an orchestrator fanning out to one subagent
+per file: a use case becomes a typed node/edge graph, and the graph is rendered to
+Mermaid. Keeping the graph is what makes the rendering checkable — every diagram is
+parsed back before the stage exits, and one whose shapes came out wrong is re-rendered
+from its graph deterministically rather than left to degrade stage 3 silently.
+
+The graph's node types are the same four the skills iterate, and each node may carry a
+`file` copied from the use case's `source_refs`, which becomes a `%% file:` hint.
 
 A Mermaid flowchart, one file per use case, named to match the stem in `use-cases/`.
 See [`output/_example/dfds/UC-LOGIN.mmd`](../output/_example/dfds/UC-LOGIN.mmd).

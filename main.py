@@ -141,7 +141,12 @@ def run_stage(stage: Stage, args: argparse.Namespace, out_dir: pathlib.Path, ind
         print(f"       {len(existing)} existing artifact(s), skipping (use --force to re-run)", flush=True)
         return "cached"
 
-    if args.dry_run and stage.needs_model:
+    if args.dry_run:
+        if not stage.needs_model:
+            # Nothing upstream wrote real artifacts this run, so executing a
+            # deterministic stage now would fail on inputs that do not exist.
+            print("       deterministic — would run against real stage output", flush=True)
+            return "skipped"
         print("       dry run", flush=True)
 
     argv = stage.argv(args, out_dir)
