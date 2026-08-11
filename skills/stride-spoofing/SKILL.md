@@ -33,6 +33,23 @@ Do not raise Spoofing threats against data stores or data flows — those belong
 and Information Disclosure. If the DFD has no external entities or processes, return an
 empty `threats` array rather than inventing an element.
 
+### Reading the diagram
+
+The DFD is a Mermaid flowchart. Element types come from node shape:
+
+| Element type | Shape | Example |
+|---|---|---|
+| External entity | rectangle | `CUST[Customer]` |
+| Process | rounded | `LOGIN(Login Handler)` |
+| Data store | cylinder | `USERS[(User Table)]` |
+| Data flow | labelled arrow between two nodes | see the diagram |
+| Trust boundary | `subgraph ... end` | `subgraph TB[Internet -> Application Server]` |
+
+You are given a typed element inventory extracted from that diagram, printed above the
+diagram itself. **Treat the inventory as the authoritative list of elements and their
+types.** Do not re-derive a type from the diagram text, and do not raise a threat against
+an element whose type is not in the applicability table at the top of this section.
+
 ## Attack Scenarios
 
 ### Scenario 1: Credential stuffing against an unthrottled login

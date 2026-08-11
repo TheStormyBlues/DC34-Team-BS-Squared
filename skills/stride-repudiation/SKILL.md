@@ -34,6 +34,23 @@ control.**
 Do not raise Repudiation against external entities or data flows. If the DFD has no
 processes or data stores, return an empty `threats` array.
 
+### Reading the diagram
+
+The DFD is a Mermaid flowchart. Element types come from node shape:
+
+| Element type | Shape | Example |
+|---|---|---|
+| External entity | rectangle | `CUST[Customer]` |
+| Process | rounded | `LOGIN(Login Handler)` |
+| Data store | cylinder | `USERS[(User Table)]` |
+| Data flow | labelled arrow between two nodes | see the diagram |
+| Trust boundary | `subgraph ... end` | `subgraph TB[Internet -> Application Server]` |
+
+You are given a typed element inventory extracted from that diagram, printed above the
+diagram itself. **Treat the inventory as the authoritative list of elements and their
+types.** Do not re-derive a type from the diagram text, and do not raise a threat against
+an element whose type is not in the applicability table at the top of this section.
+
 ## Security-relevant authentication events
 
 Every one of these should produce a log entry. Check each against the code and record the

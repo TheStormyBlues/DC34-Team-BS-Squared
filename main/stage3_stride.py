@@ -43,6 +43,7 @@ from main.contract import (
     validate_merged,
     validate_skill_output,
 )
+from main.mermaid import parse_mermaid, render_inventory
 
 DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_TEMPERATURE = 0.3
@@ -85,8 +86,44 @@ def load_use_cases(path: pathlib.Path) -> list[dict[str, Any]]:
     return cases
 
 
+def dfd_warnings(use_case: dict[str, Any]) -> list[str]:
+    """Diagram problems worth telling the operator about, from the Mermaid parser."""
+    if not use_case.get("mermaid"):
+        return []
+    return parse_mermaid(use_case["mermaid"])["warnings"]
+
+
 def render_dfd(use_case: dict[str, Any]) -> str:
-    """Render whatever shape stage 2 produced into text the agent can iterate."""
+    """Render stage 2's diagram into text the agent can iterate.
+
+    Mermaid is the expected input. It is parsed into a typed element inventory so
+    the agent never has to infer whether a box is a process or a data store, and the
+    raw diagram is included after it for context. A structured `dfd` object is still
+    accepted as a fallback.
+    """
+    if use_case.get("mermaid"):
+        parsed = parse_mermaid(use_case["mermaid"])
+        # Mermaid cannot carry per-node source locations, so stage 2 supplies them
+        # as a side map keyed by node id (or by element name). Merge them in — this
+        # is what points the agent at the code instead of making it search.
+        hints = use_case.get("file_hints") or {}
+        for key in ("external_entities", "processes", "data_stores"):
+            for item in parsed[key]:
+                found = hints.get(item.get("id")) or hints.get(item["name"])
+                if found:
+                    item["file_hints"] = [found] if isinstance(found, str) else list(found)
+        inventory = render_inventory(parsed)
+        blocks = []
+        if inventory:
+            blocks.append("Elements (typed, extracted from the diagram below):\n" + inventory)
+        else:
+            blocks.append(
+                "No elements could be extracted from the diagram. Report this rather than "
+                "inventing elements."
+            )
+        blocks.append("Diagram (Mermaid):\n" + use_case["mermaid"].strip())
+        return "\n\n".join(blocks)
+
     lines: list[str] = []
     dfd = use_case.get("dfd") or {}
 
@@ -115,11 +152,6 @@ def render_dfd(use_case: dict[str, Any]) -> str:
             if item.get("description"):
                 detail.append(item["description"])
             lines.append(f"  - {name}" + (f" ({'; '.join(detail)})" if detail else ""))
-        lines.append("")
-
-    if use_case.get("mermaid"):
-        lines.append("Diagram:")
-        lines.append(use_case["mermaid"].strip())
         lines.append("")
 
     if not lines:
@@ -273,6 +305,10 @@ def main(argv: list[str] | None = None) -> int:
         skill_dir = args.skills / SKILL_FOR_LETTER[letter]
         if not (skill_dir / "SKILL.md").exists():
             raise SystemExit(f"missing skill: {skill_dir / 'SKILL.md'}")
+
+    for use_case in use_cases:
+        for warning in dfd_warnings(use_case):
+            print(f"diagram warning [{use_case['id']}]: {warning}", file=sys.stderr)
 
     if args.dry_run:
         for use_case in use_cases:
