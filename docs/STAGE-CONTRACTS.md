@@ -4,13 +4,22 @@ What each stage hands the next. Stage 3 (STRIDE analysis) is built against these
 shapes; stages 1 and 2 own producing them.
 
 ```
-output/
+output/<owner>/<repo>/
   use-cases/<id>.json      stage 1 — name, description, entry points
   dfds/<id>.mmd            stage 2 — the Mermaid diagram
   threats/<id>/<L>.json    stage 3 — one file per agent call, the cache unit
   threats/<id>.json        stage 3 — merged per use case, what stage 4 reads
   report.md                stage 4 — the deliverable, and the chatbot's corpus
 ```
+
+**Output is namespaced by the repository being scanned**, resolved from its git remote
+— so a Juice Shop clone lands in `output/juice-shop/juice-shop/` no matter what the
+local directory is called. Several targets can be analyzed side by side, and two people
+who cloned to different directory names produce the same path. `main/target.py` does the
+resolution and falls back to the directory name for a non-git source drop.
+
+Run the whole chain with `python main.py --repo repo`; every stage also runs standalone
+against the same directory.
 
 **The filename is the use case id.** Stages never have to agree on anything but a
 stem: stage 2 writes `dfds/UC-LOGIN.mmd` because stage 1 wrote

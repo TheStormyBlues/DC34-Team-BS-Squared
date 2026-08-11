@@ -9,14 +9,15 @@
 Each stage reads and writes files under one directory, so the chain is the filesystem
 rather than anything passed in memory:
 
-    output/<repo>/use-cases/<id>.json    stage 1  characterize
-    output/<repo>/dfds/<id>.mmd          stage 2  data flow diagrams
-    output/<repo>/threats/<id>.json      stage 3  STRIDE analysis
-    output/<repo>/report.md              stage 4  the report
+    output/<owner>/<repo>/use-cases/<id>.json    stage 1  characterize
+    output/<owner>/<repo>/dfds/<id>.mmd          stage 2  data flow diagrams
+    output/<owner>/<repo>/threats/<id>.json      stage 3  STRIDE analysis
+    output/<owner>/<repo>/report.md              stage 4  the report
 
-That layout comes from stage 1, which namespaces output by target directory name so
-several applications can be analyzed without collision. This runner derives the same
-path and hands it to every later stage.
+Output is namespaced by the repository being scanned — resolved from its git remote,
+so `output/juice-shop/juice-shop/` rather than the local clone directory's arbitrary
+name. Several applications can then be analyzed without collision, and two people who
+cloned to different directory names produce the same path. See main/target.py.
 
 Stages are invoked through their own CLIs, so each keeps its own defaults — notably
 stage 1 runs an open-weight model with validated tools while the others run Claude.
@@ -33,6 +34,8 @@ import pathlib
 import sys
 import time
 from typing import Callable
+
+from main.target import display_name, output_dir, repo_slug
 
 
 class Stage:
@@ -113,7 +116,7 @@ STAGES: list[Stage] = [
         title="Assemble the report",
         module="main.stage4_report",
         # Stage 4 is deterministic, so it runs even under --dry-run.
-        argv=lambda a, out: ["--output", str(out), "--target", a.target or a.repo.resolve().name],
+        argv=lambda a, out: ["--output", str(out), "--target", a.target or display_name(a.repo)],
         produces=_report_file,
         needs_model=False,
     ),
@@ -180,8 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", type=pathlib.Path, default=pathlib.Path("repo"),
                         help="target application clone (default: ./repo)")
     parser.add_argument("--output", type=pathlib.Path,
-                        help="output directory (default: output/<repo dir name>, matching stage 1)")
-    parser.add_argument("--target", help="application name for the report title (default: repo dir name)")
+                        help="output directory (default: output/<owner>/<repo> from the target's git remote)")
+    parser.add_argument("--target", help="application name for the report title (default: the repository name)")
     parser.add_argument("--from", dest="from_stage", choices=STAGE_KEYS, help="start at this stage")
     parser.add_argument("--only", choices=STAGE_KEYS, help="run just this stage")
     parser.add_argument("--force", action="store_true", help="re-run stages that already have output")
@@ -195,8 +198,10 @@ def main(argv: list[str] | None = None) -> int:
             f"  git clone --depth 1 https://github.com/juice-shop/juice-shop.git {args.repo}"
         )
 
-    # Stage 1 derives output/<repo dir name>; mirror it so every stage agrees.
-    out_dir = args.output or pathlib.Path("output") / args.repo.resolve().name
+    # Namespaced by the repository being scanned, not by the local clone directory —
+    # main/target.py resolves that from the git remote. Stage 1 derives the same path,
+    # so running it standalone lands in the same place.
+    out_dir = args.output or output_dir(args.repo)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     selected = STAGES
@@ -205,8 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.from_stage:
         selected = STAGES[STAGE_KEYS.index(args.from_stage):]
 
-    print(f"target  {args.repo.resolve()}")
-    print(f"output  {out_dir.resolve()}")
+    print(f"target  {repo_slug(args.repo)}  ({args.repo.resolve()})")
+    print(f"output  {out_dir}")
     print(f"stages  {', '.join(s.key for s in selected)}" + ("  (dry run)" if args.dry_run else ""))
 
     results: dict[str, str] = {}
