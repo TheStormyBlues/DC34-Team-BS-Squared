@@ -1,0 +1,56 @@
+{
+  "_comment": "EXAMPLE — one agent call. Stage 3 writes output/threats/<use case id>/<LETTER>.json, one per STRIDE letter, and skips any that already exists unless --force. That per-letter granularity is the cache unit: re-running Repudiation alone costs one call, not six. Stage 4 should read the merged ../<use case id>.json instead of these.",
+  "use_case_id": "_example",
+  "stride_letter": "S",
+  "threats": [
+    {
+      "id": "T-_example-S-001",
+      "stride": "S",
+      "title": "Credential stuffing against an unthrottled login endpoint",
+      "dfd_element": { "name": "Login Handler", "type": "process" },
+      "trust_boundary": "Internet -> Application Server",
+      "description": "The login route compares credentials with no rate limit, lockout, or CAPTCHA, so an attacker may guess passwords without bound.",
+      "attack_scenario": "The attacker replays a breach corpus of email/password pairs against POST /rest/user/login. With no throttling, a few thousand requests surface accounts whose owners reused a password.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 31,
+          "snippet": "const user = await models.User.findOne({ where: { email, password: hash(password) } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": ["CWE-307", "CWE-287"],
+      "recommendation": "Rate limit the login route by both source address and target account, and add escalating delay after repeated failures."
+    },
+    {
+      "id": "T-_example-S-002",
+      "stride": "S",
+      "title": "Session identifier not rotated on successful authentication",
+      "dfd_element": { "name": "Token Issuer", "type": "process" },
+      "trust_boundary": "Internet -> Application Server",
+      "description": "No session regeneration was located on the authentication path, leaving any pre-login identifier valid afterwards.",
+      "attack_scenario": "The attacker plants a known session identifier in the victim's browser, waits for the victim to authenticate, then reuses that identifier to act as them.",
+      "evidence": [],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": ["CWE-384"],
+      "recommendation": "Regenerate the session identifier immediately after a successful credential check."
+    }
+  ],
+  "_notes": {
+    "risk": "DERIVED, never assigned: likelihood x impact through the fixed matrix in main/contract.py. high x high = critical, medium x high = high. A threat whose risk disagrees with its inputs is rejected and the call retried.",
+    "confidence": "'high' REQUIRES at least one evidence entry with a real file and line. 'low' with an empty evidence array is correct and expected when the code could not be located — see T-_example-S-002. Inventing a plausible path to justify high confidence is the failure this rule exists to prevent.",
+    "id": "T-<use case id>-<LETTER>-<nnn>, numbered from 001 within each call.",
+    "dfd_element.type": "Must be one the letter actually analyzes. Spoofing accepts external_entity and process only; a Spoofing threat against a data_store is rejected.",
+    "status": "unmitigated | partial | mitigated. Keep mitigated threats — they show which controls already exist."
+  }
+}

@@ -30,8 +30,7 @@ llm = ChatBedrockConverse(
     temperature=0.3,
 )
 
-all_threats = []
-for use_case in use_cases:                      # from stage 1/2
+for use_case in use_cases:                      # output/use-cases/*.json + output/dfds/*.mmd
     for letter, skill_name in LETTERS:          # deterministic coverage
         agent = create_deep_agent(
             model=llm,
@@ -41,7 +40,15 @@ for use_case in use_cases:                      # from stage 1/2
             skills=[f"skills/{skill_name}"],    # exactly one skill per call
         )
         result = agent.invoke({"messages": [{"role": "user", "content": task(use_case)}]})
-        all_threats.extend(parse_json(result))
+        write(f"output/threats/{use_case['id']}/{letter}.json", parse_json(result))
+```
+
+That loop is implemented in [`main/stage3_stride.py`](../main/stage3_stride.py), with
+caching, contract validation, and retry — run it rather than rewriting it:
+
+```bash
+python -m main.stage3_stride --dry-run          # prompts only, no credentials needed
+python -m main.stage3_stride --repo ./juice-shop
 ```
 
 Passing `skills=[f"skills/{skill_name}"]` — a single skill directory — rather than the whole

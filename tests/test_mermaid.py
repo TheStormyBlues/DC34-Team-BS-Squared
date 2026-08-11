@@ -178,23 +178,57 @@ def test_render_inventory_includes_file_hints():
     assert "routes/login.ts" in render_inventory(parsed)
 
 
-# --- the shipped example ----------------------------------------------------
+# --- file hints -------------------------------------------------------------
 
 
-def test_example_fixture_parses_cleanly():
+def test_file_hint_comments_are_parsed():
+    parsed = parse_mermaid(
+        "flowchart TD\n  LOGIN(Handler)\n  %% file: LOGIN routes/login.ts\n"
+    )
+    assert parsed["file_hints"] == {"LOGIN": ["routes/login.ts"]}
+
+
+def test_file_hint_accepts_several_paths():
+    parsed = parse_mermaid(
+        "flowchart TD\n  U[(Users)]\n  %% file: U models/user.ts, models/session.ts\n"
+    )
+    assert parsed["file_hints"]["U"] == ["models/user.ts", "models/session.ts"]
+
+
+def test_file_hint_for_an_undrawn_node_warns():
+    parsed = parse_mermaid("flowchart TD\n  A(Handler)\n  %% file: GHOST routes/nope.ts\n")
+    assert any("never drawn" in w for w in parsed["warnings"])
+
+
+def test_ordinary_comments_are_ignored():
+    parsed = parse_mermaid("flowchart TD\n  %% just a note\n  A(Handler)\n")
+    assert parsed["file_hints"] == {}
+    assert len(parsed["processes"]) == 1
+
+
+# --- the shipped examples ---------------------------------------------------
+
+EXAMPLES = ROOT / "output"
+
+
+def test_example_diagram_parses_cleanly():
     """The file teammates copy must itself be exemplary."""
-    payload = json.loads((FIXTURES / "example_use_cases.json").read_text())
-    for use_case in payload["use_cases"]:
-        parsed = parse_mermaid(use_case["mermaid"])
-        assert parsed["warnings"] == [], f"{use_case['id']}: {parsed['warnings']}"
-        assert parsed["processes"], f"{use_case['id']} has no processes"
-        assert parsed["external_entities"], f"{use_case['id']} has no external entities"
+    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    assert parsed["warnings"] == [], parsed["warnings"]
+    assert parsed["processes"], "no processes — Elevation of Privilege would return nothing"
+    assert parsed["external_entities"], "no external entities — Spoofing coverage would be thin"
+    assert parsed["data_stores"]
 
 
-def test_example_fixture_file_hints_resolve_to_real_node_ids():
-    payload = json.loads((FIXTURES / "example_use_cases.json").read_text())
-    for use_case in payload["use_cases"]:
-        parsed = parse_mermaid(use_case["mermaid"])
-        ids = {e["id"] for g in ("external_entities", "processes", "data_stores") for e in parsed[g]}
-        for hinted in (use_case.get("file_hints") or {}):
-            assert hinted in ids, f"{use_case['id']}: file_hints key {hinted!r} is not a node id ({sorted(ids)})"
+def test_example_diagram_hints_resolve_to_real_node_ids():
+    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    ids = {e["id"] for g in ("external_entities", "processes", "data_stores") for e in parsed[g]}
+    for hinted in parsed["file_hints"]:
+        assert hinted in ids, f"file hint {hinted!r} is not a node id ({sorted(ids)})"
+
+
+def test_example_header_comments_are_not_parsed_as_elements():
+    """The example carries a long `%%` preamble; none of it may become an element."""
+    parsed = parse_mermaid((EXAMPLES / "dfds" / "_example.mmd").read_text())
+    assert len(parsed["external_entities"]) == 1
+    assert [e["name"] for e in parsed["processes"]] == ["Login Handler", "Token Issuer"]

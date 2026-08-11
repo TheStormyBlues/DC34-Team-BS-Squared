@@ -8,18 +8,23 @@ Each response is validated against main/contract.py. A malformed response is fed
 its own error list and retried, so one bad generation does not cost the run.
 
     # see the prompts without spending a token or needing langchain installed
-    python -m main.stage3_stride --use-cases output/use-cases.json --dry-run
+    python -m main.stage3_stride --dry-run
 
     # real run
-    python -m main.stage3_stride \
-        --use-cases output/use-cases.json \
-        --repo ./juice-shop \
-        --out output/stride
+    python -m main.stage3_stride --repo ./juice-shop
 
     # iterate on one call while debugging
-    python -m main.stage3_stride ... --only-use-case UC-LOGIN --only-letter R --force
+    python -m main.stage3_stride --repo ./juice-shop \
+        --only-use-case UC-LOGIN --only-letter R --force
 
-Results are cached per call: an existing output file is skipped unless --force.
+Reads and writes the shared output layout:
+
+    output/use-cases/<id>.json    stage 1 — name, description, entry points
+    output/dfds/<id>.mmd          stage 2 — the Mermaid diagram
+    output/threats/<id>/<L>.json  one file per agent call, the cache unit
+    output/threats/<id>.json      merged per use case — what stage 4 reads
+
+Results are cached per call: an existing per-letter file is skipped unless --force.
 That matters when you are iterating on one letter and do not want to pay for the
 other five again.
 """
@@ -69,20 +74,54 @@ markdown fence."""
 # --- input ------------------------------------------------------------------
 
 
-def load_use_cases(path: pathlib.Path) -> list[dict[str, Any]]:
-    """Read stage 2 output.
+def load_use_cases(output_root: pathlib.Path) -> list[dict[str, Any]]:
+    """Read stage 1 and stage 2 output from the shared layout.
 
-    Accepts either {"use_cases": [...]} or a bare list, and tolerates a use case
-    that carries a structured `dfd`, a `mermaid` string, or both.
+        output/use-cases/<id>.json    stage 1 — name, description, entry points
+        output/dfds/<id>.mmd          stage 2 — the Mermaid diagram
+
+    The file stem is the use case id, so the two stages never have to agree on
+    anything but a filename. Files whose name starts with `_` are skipped, which is
+    how the shipped `_example` artifacts sit in the real directories without being
+    analyzed.
     """
-    payload = json.loads(path.read_text())
-    cases = payload.get("use_cases", payload) if isinstance(payload, dict) else payload
-    if not isinstance(cases, list):
-        raise SystemExit(f"{path}: expected a list of use cases or a 'use_cases' key")
+    cases_dir = output_root / "use-cases"
+    dfds_dir = output_root / "dfds"
 
-    for i, case in enumerate(cases):
-        if not isinstance(case, dict) or not case.get("id"):
-            raise SystemExit(f"{path}: use case {i} has no 'id' — stage 2 must assign a stable id")
+    if not cases_dir.is_dir():
+        raise SystemExit(f"no use cases directory at {cases_dir} — has stage 1 run?")
+
+    cases: list[dict[str, Any]] = []
+    for path in sorted(cases_dir.glob("*.json")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            case = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"{path}: invalid JSON — {exc}") from None
+        if not isinstance(case, dict):
+            raise SystemExit(f"{path}: expected a JSON object describing one use case")
+
+        case.setdefault("id", path.stem)
+        if case["id"] != path.stem:
+            raise SystemExit(
+                f"{path}: id is {case['id']!r} but the filename says {path.stem!r}. "
+                "The filename is the id — rename one to match."
+            )
+
+        diagram = dfds_dir / f"{path.stem}.mmd"
+        if diagram.exists():
+            case["mermaid"] = diagram.read_text()
+        elif not case.get("mermaid") and not case.get("dfd"):
+            print(
+                f"warning [{case['id']}]: no diagram at {diagram} — the analysis will have "
+                "no elements to iterate",
+                file=sys.stderr,
+            )
+        cases.append(case)
+
+    if not cases:
+        raise SystemExit(f"no use cases found in {cases_dir} (files starting with '_' are skipped)")
     return cases
 
 
@@ -103,10 +142,11 @@ def render_dfd(use_case: dict[str, Any]) -> str:
     """
     if use_case.get("mermaid"):
         parsed = parse_mermaid(use_case["mermaid"])
-        # Mermaid cannot carry per-node source locations, so stage 2 supplies them
-        # as a side map keyed by node id (or by element name). Merge them in — this
-        # is what points the agent at the code instead of making it search.
-        hints = use_case.get("file_hints") or {}
+        # Mermaid cannot carry per-node source locations, so they ride in `%% file:`
+        # comments inside the diagram. A `file_hints` map on the use case JSON still
+        # works and wins on conflict. This is what points the agent at the code
+        # instead of making it search.
+        hints = {**parsed.get("file_hints", {}), **(use_case.get("file_hints") or {})}
         for key in ("external_entities", "processes", "data_stores"):
             for item in parsed[key]:
                 found = hints.get(item.get("id")) or hints.get(item["name"])
@@ -280,9 +320,13 @@ def run_one(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run six STRIDE skills over each use case.")
-    parser.add_argument("--use-cases", type=pathlib.Path, required=True, help="stage 2 output JSON")
+    parser.add_argument(
+        "--output",
+        type=pathlib.Path,
+        default=pathlib.Path("output"),
+        help="shared output root holding use-cases/, dfds/ and threats/",
+    )
     parser.add_argument("--repo", type=pathlib.Path, help="target application clone (required unless --dry-run)")
-    parser.add_argument("--out", type=pathlib.Path, default=pathlib.Path("output/stride"))
     parser.add_argument("--skills", type=pathlib.Path, default=pathlib.Path("skills"))
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
@@ -292,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print prompts, call nothing")
     args = parser.parse_args(argv)
 
-    use_cases = load_use_cases(args.use_cases)
+    use_cases = load_use_cases(args.output)
     if args.only_use_case:
         use_cases = [u for u in use_cases if u["id"] == args.only_use_case]
         if not use_cases:
@@ -325,21 +369,29 @@ def main(argv: list[str] | None = None) -> int:
     if not args.repo.exists():
         raise SystemExit(f"repo path does not exist: {args.repo}")
 
-    args.out.mkdir(parents=True, exist_ok=True)
+    threats_root = args.output / "threats"
+    threats_root.mkdir(parents=True, exist_ok=True)
     total = len(use_cases) * len(letters)
     done = 0
     failures: list[str] = []
     all_threats: list[dict[str, Any]] = []
 
     for use_case in use_cases:
+        # Per-letter files are the working artifacts: one agent call each, so a
+        # re-run of a single letter costs one call rather than six. The merged
+        # per-use-case file below is what stage 4 reads.
+        per_letter_dir = threats_root / use_case["id"]
+        per_letter_dir.mkdir(parents=True, exist_ok=True)
+        case_threats: list[dict[str, Any]] = []
+
         for letter in letters:
             done += 1
-            target = args.out / f"{use_case['id']}-{letter}.json"
+            target = per_letter_dir / f"{letter}.json"
             label = f"[{done}/{total}] {use_case['id']} / {letter} ({LETTERS[letter]})"
 
             if target.exists() and not args.force:
                 blob = json.loads(target.read_text())
-                all_threats.extend(blob.get("threats", []))
+                case_threats.extend(blob.get("threats", []))
                 print(f"{label}: cached, {len(blob.get('threats', []))} threat(s)", flush=True)
                 continue
 
@@ -352,11 +404,26 @@ def main(argv: list[str] | None = None) -> int:
                 continue
 
             target.write_text(json.dumps(blob, indent=2) + "\n")
-            all_threats.extend(blob["threats"])
+            case_threats.extend(blob["threats"])
             print(f"      {len(blob['threats'])} threat(s) -> {target}", flush=True)
 
-    merged = args.out / "all_threats.json"
-    merged.write_text(json.dumps({"threats": all_threats}, indent=2) + "\n")
+        # Merge whichever letters ran this time with any already on disk, so a
+        # partial run still leaves a complete, readable per-use-case file.
+        if letters != list(LETTERS):
+            for existing in sorted(per_letter_dir.glob("*.json")):
+                if existing.stem in letters:
+                    continue
+                case_threats.extend(json.loads(existing.read_text()).get("threats", []))
+
+        merged_case = threats_root / f"{use_case['id']}.json"
+        merged_case.write_text(
+            json.dumps(
+                {"use_case_id": use_case["id"], "name": use_case.get("name", ""), "threats": case_threats},
+                indent=2,
+            )
+            + "\n"
+        )
+        all_threats.extend(case_threats)
 
     print("\ncoverage (threats per letter)")
     table = coverage_table(all_threats)
@@ -366,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         counts = "".join(str(row[l]).rjust(4) for l in LETTERS)
         print(f"  {use_case_id.ljust(24)}{counts}{str(sum(row.values())).rjust(7)}")
 
-    print(f"\n{len(all_threats)} threat(s) across {len(table)} use case(s) -> {merged}")
+    print(f"\n{len(all_threats)} threat(s) across {len(table)} use case(s) -> {threats_root}/<use-case-id>.json")
 
     for warning in validate_merged(all_threats):
         print(f"  note: {warning}")

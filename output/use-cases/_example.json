@@ -1,0 +1,18 @@
+{
+  "_comment": "EXAMPLE — stage 1 output. One file per use case, named <use case id>.json. The filename IS the id; stage 3 rejects a file whose `id` field disagrees with its stem. Files starting with '_' are skipped, so this one is never analyzed. Copy it to output/use-cases/UC-LOGIN.json to start.",
+
+  "id": "_example",
+  "name": "Registered customer signs in with email and password",
+  "description": "A customer submits credentials to the login endpoint. The application verifies them against the user store and issues a signed token that authorizes every subsequent request.",
+  "entry_points": ["POST /rest/user/login"],
+  "source_refs": ["routes/login.ts", "lib/insecurity.ts", "models/user.ts"],
+
+  "_fields": {
+    "id": "REQUIRED. Stable across runs — it becomes part of every threat id, so changing it breaks run-to-run diffing. Convention: UC-SCREAMING-KEBAB. Must be filesystem-safe: no slashes or spaces.",
+    "name": "Recommended. One line, appears verbatim in the stage 3 prompt.",
+    "description": "Recommended. Two or three sentences on what actually happens. The agent's orientation before it reads any code.",
+    "entry_points": "Optional. Routes or handlers. Useful to stage 2, ignored by stage 3.",
+    "source_refs": "Optional. Files stage 1 found relevant. Stage 2 turns these into '%% file:' hints in the diagram.",
+    "_any_other_key": "Ignored by stage 3, so stages 1 and 2 can carry extra fields without coordinating."
+  }
+}

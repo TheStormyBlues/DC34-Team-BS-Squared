@@ -4,43 +4,52 @@ What each stage hands the next. Stage 3 (STRIDE analysis) is built against these
 shapes; stages 1 and 2 own producing them.
 
 ```
-stage 1  characterize app  ──▶  use cases            ──▶  output/use-cases.json
-stage 2  draw DFDs         ──▶  use cases + mermaid  ──▶  output/use-cases.json  (enriched)
-stage 3  STRIDE skills     ──▶  threats              ──▶  output/stride/*.json
+output/
+  use-cases/<id>.json      stage 1 — name, description, entry points
+  dfds/<id>.mmd            stage 2 — the Mermaid diagram
+  threats/<id>/<L>.json    stage 3 — one file per agent call, the cache unit
+  threats/<id>.json        stage 3 — merged per use case, what stage 4 reads
 ```
 
-Stage 2 enriches stage 1's file rather than inventing a new one, so there is a single
-artifact to pass along and a single thing to debug.
+**The filename is the use case id.** Stages never have to agree on anything but a
+stem: stage 2 writes `dfds/UC-LOGIN.mmd` because stage 1 wrote
+`use-cases/UC-LOGIN.json`. Stage 3 rejects a file whose `id` field disagrees with its
+filename rather than guessing which is right. Ids must be filesystem-safe — no slashes
+or spaces. Convention: `UC-SCREAMING-KEBAB`.
+
+**Files starting with `_` are skipped.** Each directory ships an `_example` artifact
+showing its shape; they sit alongside real output without ever being analyzed. Copy one
+to start.
 
 ---
 
-## Stage 1 → Stage 2: use cases
+## Stage 1 → `output/use-cases/<id>.json`
 
 Scope is **authentication**, so aim for the handful of flows that decide who someone
 is: sign-in, registration, password reset, token refresh, logout, MFA enrollment, OAuth
 callback. Six to eight is plenty; each one costs six agent calls downstream.
 
+One file per use case. See [`output/use-cases/_example.json`](../output/use-cases/_example.json).
+
 ```json
 {
-  "use_cases": [
-    {
-      "id": "UC-LOGIN",
-      "name": "Registered customer signs in with email and password",
-      "description": "A customer submits credentials to the login endpoint. The application verifies them against the user store and issues a signed token used by every subsequent authenticated request.",
-      "entry_points": ["POST /rest/user/login"],
-      "source_refs": ["routes/login.ts", "lib/insecurity.ts", "models/user.ts"]
-    }
-  ]
+  "id": "UC-LOGIN",
+  "name": "Registered customer signs in with email and password",
+  "description": "A customer submits credentials to the login endpoint. The application verifies them against the user store and issues a signed token that authorizes every subsequent request.",
+  "entry_points": ["POST /rest/user/login"],
+  "source_refs": ["routes/login.ts", "lib/insecurity.ts", "models/user.ts"]
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | **yes** | Stable across runs — it becomes part of every threat ID, so a changed id breaks run-to-run diffing. Convention: `UC-SCREAMING-KEBAB`. |
+| `id` | **yes** | Must equal the filename stem. Stable across runs — it becomes part of every threat id, so changing it breaks run-to-run diffing. |
 | `name` | recommended | One line. Appears verbatim in the stage 3 prompt. |
-| `description` | recommended | Two or three sentences of what actually happens. The agent's orientation before it reads code. |
+| `description` | recommended | Two or three sentences on what actually happens. The agent's orientation before it reads code. |
 | `entry_points` | optional | Routes or handlers. Useful to stage 2, ignored by stage 3. |
-| `source_refs` | optional | Files stage 1 found relevant. Stage 2 turns these into `file_hints`. |
+| `source_refs` | optional | Files stage 1 found relevant. Stage 2 turns these into `%% file:` hints. |
+
+Any other key is ignored, so stages can carry extra fields without coordinating.
 
 Stage 3 runs on this alone, but with no diagram it has no elements to iterate and falls
 back to generic advice — the exact failure the per-element structure exists to prevent.
@@ -48,32 +57,10 @@ Treat stage 1 output as incomplete input.
 
 ---
 
-## Stage 2 → Stage 3: use cases with Mermaid DFDs
+## Stage 2 → `output/dfds/<id>.mmd`
 
-Same file, with a `mermaid` string added to each use case. This is the shape stage 3
-actually reads.
-
-```json
-{
-  "use_cases": [
-    {
-      "id": "UC-LOGIN",
-      "name": "Registered customer signs in with email and password",
-      "description": "A customer submits credentials to the login endpoint...",
-
-      "mermaid": "flowchart LR\n  subgraph TB_NET[Internet -> Application Server]\n    CUST[Customer]\n  end\n  subgraph TB_APP[Application Server]\n    LOGIN(Login Handler)\n    TOKEN(Token Issuer)\n  end\n  subgraph TB_DB[Application Server -> Database]\n    USERS[(User Table)]\n  end\n  CUST -->|credentials| LOGIN\n  LOGIN -->|lookup by email| USERS\n  LOGIN -->|identity claims| TOKEN\n  TOKEN -->|signed JWT| CUST",
-
-      "file_hints": {
-        "LOGIN": ["routes/login.ts"],
-        "TOKEN": ["lib/insecurity.ts"],
-        "USERS": ["models/user.ts"]
-      }
-    }
-  ]
-}
-```
-
-Unescaped, that diagram is:
+A Mermaid flowchart, one file per use case, named to match the stem in `use-cases/`.
+See [`output/dfds/_example.mmd`](../output/dfds/_example.mmd).
 
 ```mermaid
 flowchart LR
@@ -87,6 +74,11 @@ flowchart LR
   subgraph TB_DB[Application Server -> Database]
     USERS[(User Table)]
   end
+
+  %% file: LOGIN routes/login.ts
+  %% file: TOKEN lib/insecurity.ts
+  %% file: USERS models/user.ts
+
   CUST -->|credentials| LOGIN
   LOGIN -->|lookup by email| USERS
   LOGIN -->|identity claims| TOKEN
@@ -141,73 +133,42 @@ Two consequences worth designing around: **Elevation of Privilege analyzes proce
 only**, so a diagram with no rounded nodes produces zero E findings; and **Spoofing needs
 external entities or processes**. Draw the shapes correctly or whole letters go quiet.
 
-### `file_hints`
+### Source locations
 
-Mermaid cannot carry a source location per node, so hints ride alongside as a map keyed
-by **node id** (the `LOGIN` in `LOGIN(Login Handler)`), or by element name if you prefer.
-Values are a string or a list of strings.
+A node cannot carry a file path, so hints ride in Mermaid comments — which render as
+nothing and keep one artifact per diagram:
 
-Optional, but it is the biggest single lever on evidence quality — it points the agent at
-the file instead of making it search, which directly determines how many findings come
-back at `confidence: "high"` with a citable line.
+```
+%% file: LOGIN routes/login.ts
+%% file: USERS models/user.ts, models/session.ts
+```
+
+The id is the node id (the `LOGIN` in `LOGIN(Login Handler)`), followed by one or more
+paths. A hint naming a node that is never drawn is warned about and ignored.
+
+Optional, but the biggest single lever on evidence quality — it points the agent at the
+file instead of making it search, which directly determines how many findings come back
+at `confidence: "high"` with a citable line.
 
 ### Trust boundaries
 
-Wrap elements in a `subgraph`. Stage 3 records which boundary each element sits inside and
-passes it through to the threat record, so "crosses the Internet → Application Server
-boundary" appears in the output. Name boundaries for the crossing, not the zone —
+Wrap elements in a `subgraph`. Stage 3 records which boundary each element sits inside
+and passes it through to the threat record, so "crosses the Internet → Application
+Server boundary" appears in the output. Name boundaries for the crossing, not the zone —
 `Internet -> Application Server` beats `External`.
 
 ---
 
-## What stage 3 requires versus tolerates
+## Stage 3 → `output/threats/`
 
-The loader is deliberately forgiving so a missing field degrades quality rather than
-ending the run:
+Stage 3 makes one agent call per use case per letter and writes each to
+`threats/<id>/<LETTER>.json` — see
+[`output/threats/_example/S.json`](../output/threats/_example/S.json). An existing file
+is skipped unless `--force`, so re-running one letter costs one call rather than six.
 
-- **Hard requirement:** a top-level list of use cases (either `{"use_cases": [...]}` or a
-  bare array), and every use case has an `id`. Anything else is a startup error.
-- **Everything else is optional.** No `mermaid` produces a note in the prompt rather than
-  a crash; no `description` just yields a thinner prompt.
-- **A structured `dfd` object is still accepted** as a fallback, with `external_entities`,
-  `processes`, `data_stores`, `data_flows`, `trust_boundaries` keys. Mermaid wins if both
-  are present.
-- **Unknown keys are ignored,** so stages 1 and 2 can carry extra fields without
-  coordinating with stage 3.
-
----
-
-## How to check your output without spending a token
-
-`--dry-run` renders the exact prompts stage 3 will send, and needs neither AWS credentials
-nor the deepagents install. Diagram warnings print first, on stderr:
-
-```bash
-python -m main.stage3_stride --use-cases output/use-cases.json --dry-run
-
-# one call, while iterating
-python -m main.stage3_stride --use-cases output/use-cases.json \
-    --dry-run --only-use-case UC-LOGIN --only-letter R
-```
-
-What to look for in the output:
-
-- **Diagram warnings** — any at all mean the parse is degraded. Fix them first.
-- **The typed inventory** — every element should appear under the right heading. If your
-  Login Handler is listed under "External entities", it is drawn `[...]` instead of `(...)`.
-- **Empty inventory** — the diagram did not parse. Check for a `flowchart` header line.
-
-A complete two-use-case example lives at
-[`tests/fixtures/example_use_cases.json`](../tests/fixtures/example_use_cases.json) — copy
-it as a starting point.
-
----
-
-## Stage 3 → Stage 4: threats
-
-For whoever writes the report. Stage 3 writes one file per call to
-`output/stride/<use-case-id>-<letter>.json`, plus a merged
-`output/stride/all_threats.json` holding `{"threats": [...]}`.
+It then merges all six into `threats/<id>.json` — see
+[`output/threats/_example.json`](../output/threats/_example.json). **Stage 4 reads only
+the merged file**; the per-letter directory is stage 3's working state.
 
 Each threat carries `id`, `stride`, `title`, `dfd_element`, `trust_boundary`,
 `description`, `attack_scenario`, `evidence` (file, line, snippet), `existing_mitigations`,
@@ -219,5 +180,50 @@ Two properties the report can rely on:
 
 - **`risk` is derived**, never assigned — `likelihood` × `impact` through a fixed matrix,
   identical in all six skills. Sorting by it is meaningful.
-- **`confidence: "high"` guarantees at least one evidence entry** with a real file and line.
-  Filtering to high-confidence findings gives you the citable subset.
+- **`confidence: "high"` guarantees at least one evidence entry** with a real file and
+  line. Filtering to it gives you the citable subset.
+
+---
+
+## What stage 3 requires versus tolerates
+
+The loader is deliberately forgiving so a missing field degrades quality rather than
+ending the run:
+
+- **Hard requirements:** `output/use-cases/` exists and holds at least one non-`_` JSON
+  file, each an object whose `id` matches its filename. Anything else is a startup error.
+- **A missing diagram** warns and produces a prompt with no elements, rather than crashing.
+- **A missing `description`** just yields a thinner prompt.
+- **A structured `dfd` object** on the use case JSON is still accepted as a fallback, with
+  `external_entities`, `processes`, `data_stores`, `data_flows`, `trust_boundaries` keys.
+  The `.mmd` file wins if both exist.
+- **Unknown keys are ignored.**
+
+---
+
+## How to check your output without spending a token
+
+`--dry-run` renders the exact prompts stage 3 will send, and needs neither AWS credentials
+nor the deepagents install. Diagram warnings print first, on stderr:
+
+```bash
+python -m main.stage3_stride --dry-run
+
+# one call, while iterating
+python -m main.stage3_stride --dry-run --only-use-case UC-LOGIN --only-letter R
+```
+
+What to look for:
+
+- **Diagram warnings** — any at all mean the parse is degraded. Fix them first.
+- **The typed inventory** — every element should appear under the right heading. If your
+  Login Handler is listed under "External entities", it is drawn `[...]` not `(...)`.
+- **`implemented in ...`** next to an element — that is a `%% file:` hint landing. Missing
+  hints are the difference between a citable finding and a vague one.
+- **Empty inventory** — the diagram did not parse. Check for a `flowchart` header line.
+
+Then the real run:
+
+```bash
+python -m main.stage3_stride --repo ./juice-shop
+```

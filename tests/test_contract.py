@@ -236,15 +236,25 @@ def test_coverage_table_counts_per_letter(blob):
 # --- real run output --------------------------------------------------------
 
 
-def test_real_output_conforms():
-    """Validate anything stage 3 has actually written. Skips before the first run."""
-    files = sorted((ROOT / "output").rglob("stride/*.json")) if (ROOT / "output").exists() else []
+def test_per_letter_output_conforms():
+    """Validate every per-letter file stage 3 has written, plus the shipped example."""
+    threats_root = ROOT / "output" / "threats"
+    files = sorted(threats_root.glob("*/*.json")) if threats_root.is_dir() else []
     if not files:
         pytest.skip("no stage 3 output yet — run the pipeline first")
-    all_threats = []
     for path in files:
         payload = json.loads(path.read_text())
-        errors = validate_skill_output(payload)
+        errors = validate_skill_output(payload, expected_letter=path.stem)
         assert errors == [], f"{path.relative_to(ROOT)}: {errors}"
-        all_threats.extend(payload["threats"])
-    assert validate_merged(all_threats) == []
+
+
+def test_merged_output_conforms():
+    """The per-use-case files stage 4 reads must hold well-formed, unique threats."""
+    threats_root = ROOT / "output" / "threats"
+    files = sorted(threats_root.glob("*.json")) if threats_root.is_dir() else []
+    if not files:
+        pytest.skip("no stage 3 output yet — run the pipeline first")
+    for path in files:
+        threats = json.loads(path.read_text())["threats"]
+        ids = [t["id"] for t in threats]
+        assert len(ids) == len(set(ids)), f"{path.relative_to(ROOT)}: duplicate threat ids"

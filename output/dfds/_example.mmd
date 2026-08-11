@@ -1,0 +1,46 @@
+%% EXAMPLE — stage 2 output. One file per use case, named <use case id>.mmd,
+%% matching the stem of the file in output/use-cases/. Files starting with '_'
+%% are skipped, so this one is never analyzed.
+%%
+%% ELEMENT TYPE COMES FROM NODE SHAPE. This is the load-bearing part of the
+%% contract: each STRIDE skill analyzes only certain element types, so a box
+%% drawn with the wrong shape is analyzed by the wrong letters, or by none.
+%%
+%%   [Name]     rectangle   external entity   analyzed by S
+%%   (Name)     rounded     process           analyzed by S T R I D E
+%%   [(Name)]   cylinder    data store        analyzed by T R I D
+%%   a -->|l| b arrow       data flow         analyzed by T I D
+%%   subgraph   region      trust boundary    context only
+%%
+%% [Name] is also Mermaid's DEFAULT shape. A diagram of all rectangles reads as
+%% all external entities and five of the six letters return nothing, silently.
+%% Elevation of Privilege analyzes processes only — no (rounded) nodes, no E
+%% findings. Draw the shapes deliberately.
+%%
+%% Source locations ride in '%% file:' comments, since a node cannot carry one.
+%% They are optional but are the biggest single lever on evidence quality: they
+%% point the agent at the file instead of making it search the repository.
+
+flowchart LR
+
+  subgraph TB_NET[Internet -> Application Server]
+    CUST[Customer]
+  end
+
+  subgraph TB_APP[Application Server]
+    LOGIN(Login Handler)
+    TOKEN(Token Issuer)
+  end
+
+  subgraph TB_DB[Application Server -> Database]
+    USERS[(User Table)]
+  end
+
+  %% file: LOGIN routes/login.ts
+  %% file: TOKEN lib/insecurity.ts
+  %% file: USERS models/user.ts
+
+  CUST -->|credentials| LOGIN
+  LOGIN -->|lookup by email| USERS
+  LOGIN -->|identity claims| TOKEN
+  TOKEN -->|signed JWT| CUST

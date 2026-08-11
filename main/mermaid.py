@@ -27,6 +27,14 @@ wrong rather than noisily wrong, so it gets its own warning.
 Mermaid class tags (`:::name`, or a `class A,B name` statement) are still honoured as
 an override where present, but they are not required and not the convention.
 
+A node cannot carry a source location, so those ride in Mermaid comments, which render
+as nothing and keep one artifact per diagram:
+
+    %% file: LOGIN routes/login.ts
+    %% file: USERS models/user.ts, models/session.ts
+
+They come back on the `file_hints` key, mapping node id to a list of paths.
+
 Standard library only.
 """
 
@@ -86,6 +94,11 @@ _EDGE_RE = re.compile(
     r"(?P<dst>[A-Za-z0-9_-]+)"
 )
 
+# Source locations ride in Mermaid comments, since a node cannot carry one:
+#   %% file: LOGIN routes/login.ts
+#   %% file: USERS models/user.ts, models/session.ts
+_HINT_RE = re.compile(r"^\s*%%\s*file:\s*(?P<id>[A-Za-z0-9_-]+)\s+(?P<paths>.+?)\s*$", re.I)
+
 _CLASS_STMT_RE = re.compile(r"^\s*class\s+(?P<ids>[A-Za-z0-9_,\s-]+?)\s+(?P<cls>[A-Za-z0-9_-]+)\s*;?\s*$")
 _SUBGRAPH_RE = re.compile(
     r"^\s*subgraph\s+(?:(?P<id>[A-Za-z0-9_-]+)\s*)?(?:\[(?P<bracket>[^\]]+)\]|(?P<bare>.+?))?\s*$"
@@ -107,6 +120,7 @@ def parse_mermaid(text: str) -> dict[str, Any]:
         "data_stores": [],
         "data_flows": [],
         "trust_boundaries": [],
+        "file_hints": {},
         "warnings": [],
     }
     if not text or not text.strip():
@@ -120,6 +134,12 @@ def parse_mermaid(text: str) -> dict[str, Any]:
     for raw_line in text.splitlines():
         line = raw_line.rstrip()
         if not line.strip():
+            continue
+
+        hint = _HINT_RE.match(line)
+        if hint:
+            paths = [p.strip() for p in re.split(r"[,\s]+", hint.group("paths")) if p.strip()]
+            result["file_hints"].setdefault(hint.group("id"), []).extend(paths)
             continue
 
         if _END_RE.match(line):
@@ -219,6 +239,12 @@ def parse_mermaid(text: str) -> dict[str, Any]:
         if node.get("trust_boundary"):
             entry["trust_boundary"] = node["trust_boundary"]
         result[group_for[node["type"]]].append(entry)
+
+    for hinted_id in result["file_hints"]:
+        if hinted_id not in nodes:
+            result["warnings"].append(
+                f"'%% file: {hinted_id} ...' names a node that is never drawn; the hint is ignored"
+            )
 
     if not nodes:
         result["warnings"].append(
