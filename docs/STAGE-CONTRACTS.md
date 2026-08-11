@@ -240,7 +240,7 @@ python -m main.stage4_report --summarize        # adds an LLM executive summary
 
 Reads `threats/<id>.json`, `use-cases/<id>.json` and `dfds/<id>.mmd`; writes one markdown
 document with the severity counts, the STRIDE coverage matrix, each DFD inlined as a
-```mermaid fence, and every finding sorted worst-first with its evidence.
+`mermaid` fence, and every finding sorted worst-first with its evidence.
 
 Assembly is deterministic — same inputs, byte-identical output — so the consistency claim
 the report makes about itself is true, and the demo cannot fail on a model call. Only
