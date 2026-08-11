@@ -1,0 +1,86 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "R",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-R-001",
+      "stride": "R",
+      "title": "No audit logging of authentication events",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The Login Handler processes authentication requests but produces no durable, attributable record of login attempts, outcomes, or token issuance. Both successful and failed login attempts complete without logging, making it impossible to detect account takeovers, brute force attacks, or unauthorized access after the fact. An attacker can authenticate with stolen credentials, change the account email, and drain the account while leaving no audit trail.",
+      "attack_scenario": "An attacker obtains a user's credentials through phishing or a data breach. They authenticate successfully via POST /rest/user/login. The application returns a JWT token but logs nothing. The attacker then changes the account email and transfers funds. When the legitimate user discovers the compromise weeks later, there is no login record, no timestamp, no source IP, and no way to determine when access began or what actions the attacker performed.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 35,
+          "snippet": "const user = utils.queryResultToJson(authenticatedUser)"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 50,
+          "snippet": "res.status(401).send(res.__('Invalid email or password.'))"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 24,
+          "snippet": "const token = security.authorize(authenticatedUser)"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-778",
+        "CWE-223"
+      ],
+      "recommendation": "Implement structured logging for all authentication events. Log both successful and failed login attempts with the following attributes: event type (auth.login), outcome (success/failure), reason for failure (bad_credentials, account_locked, etc. \u2014 never the password), user ID or email (redacted), source IP address, user agent, server-generated UTC timestamp, and request ID. Ship logs to an append-only sink that the application cannot modify or delete. Example: logger.info({ event: 'auth.login', outcome: success ? 'success' : 'failure', reason: success ? undefined : 'bad_credentials', userId: user?.id ?? null, email: redact(req.body.email), sourceIp: req.ip, userAgent: req.get('user-agent'), timestamp: new Date().toISOString(), requestId: req.id })"
+    },
+    {
+      "id": "T-UC-LOGIN-R-002",
+      "stride": "R",
+      "title": "No logging of TOTP token issuance and 2FA verification",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "When a user has TOTP enabled, the Login Handler issues a temporary token for 2FA verification (line 38-46) but produces no record of this event. Similarly, the 2FA verification process (routes/2fa.ts) completes without logging. This prevents detection of 2FA bypass attempts, token reuse, or compromise of the temporary token.",
+      "attack_scenario": "An attacker obtains a user's password and email. They authenticate and receive a temporary 2FA token. The attacker attempts to use this token multiple times or attempts to bypass 2FA verification. Without logs, there is no record of the failed 2FA attempts, the token issuance, or the eventual successful verification. If the attacker succeeds, the legitimate user has no way to know their account was compromised.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 37,
+          "snippet": "if (user.data?.id && user.data.totpSecret !== '') {"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 41,
+          "snippet": "tmpToken: security.authorize({"
+        },
+        {
+          "file": "routes/2fa.ts",
+          "line": 31,
+          "snippet": "const isValid = verifySync({ secret: user.totpSecret, token: totpToken, epochTolerance: 30 }).valid"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-778",
+        "CWE-223"
+      ],
+      "recommendation": "Log all 2FA-related events: temporary token issuance, 2FA verification attempts (both success and failure), and final authentication completion. Include user ID, source IP, timestamp, and the outcome. Example: logger.info({ event: 'auth.totp_token_issued', userId: user.id, sourceIp: req.ip, timestamp: new Date().toISOString() }) and logger.info({ event: 'auth.totp_verification', outcome: isValid ? 'success' : 'failure', userId: user.id, sourceIp: req.ip, timestamp: new Date().toISOString() })"
+    }
+  ]
+}

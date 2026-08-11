@@ -1,0 +1,95 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "I",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-I-001",
+      "stride": "I",
+      "title": "Return user email in authentication response",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The login response includes the user's email address in the response body. This confirms account existence and could enable account enumeration attacks.",
+      "attack_scenario": "An attacker performs account enumeration by attempting login with a list of email addresses. By observing the response structure, they can determine which accounts exist in the system.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 26,
+          "snippet": "res.json({ authentication: { token, bid: basket.id, umail: user.email } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "medium",
+      "risk": "medium",
+      "confidence": "high",
+      "cwe": [
+        "CWE-204",
+        "CWE-200"
+      ],
+      "recommendation": "Remove the umail field from the authentication response. Return only the token and basket ID."
+    },
+    {
+      "id": "T-UC-LOGIN-I-002",
+      "stride": "I",
+      "title": "Temporary 2FA token returned in response without encryption",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "When a user has TOTP enabled, a temporary token is returned in the response body. This token could be intercepted or leaked, allowing an attacker to bypass the first factor of authentication.",
+      "attack_scenario": "An attacker intercepts the login response and extracts the temporary token. They then use this token to access the 2FA verification endpoint.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 38,
+          "snippet": "res.status(401).json({ status: 'totp_token_required', data: { tmpToken: security.authorize({ userId: user.data.id, type: 'password_valid_needs_second_factor_token' }) } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "medium",
+      "cwe": [
+        "CWE-522",
+        "CWE-200"
+      ],
+      "recommendation": "Return the temporary token in an HttpOnly, Secure, SameSite cookie instead of in the response body. Ensure the token has a short expiration time."
+    },
+    {
+      "id": "T-UC-LOGIN-I-003",
+      "stride": "I",
+      "title": "JWT token transmitted in response without encryption requirement",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The JWT token is returned in the response body without explicit encryption. If the response is transmitted over an unencrypted channel or intercepted, the token could be exposed.",
+      "attack_scenario": "An attacker intercepts the login response over an unencrypted connection and extracts the JWT token, then uses it to make authenticated requests as the victim.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 26,
+          "snippet": "res.json({ authentication: { token, bid: basket.id, umail: user.email } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "low",
+      "impact": "high",
+      "risk": "medium",
+      "confidence": "low",
+      "cwe": [
+        "CWE-522"
+      ],
+      "recommendation": "Ensure all authentication responses are transmitted over HTTPS with strict transport security headers. Return the token in an HttpOnly cookie instead of the response body."
+    }
+  ]
+}

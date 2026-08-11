@@ -1,0 +1,84 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "D",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-D-001",
+      "stride": "D",
+      "title": "Unbounded password hashing on unauthenticated login endpoint",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The /rest/user/login endpoint performs expensive bcrypt password hashing on every unauthenticated request without rate limiting. An attacker can send concurrent login requests with arbitrary passwords to exhaust CPU resources and degrade service availability for all users.",
+      "attack_scenario": "An attacker sends hundreds of concurrent POST requests to /rest/user/login with different email addresses and passwords. Each request triggers bcrypt hashing at cost factor 12 (approximately 100ms of CPU per request). Within seconds, the CPU pool is saturated and the application becomes unresponsive to legitimate login attempts and other requests.",
+      "evidence": [
+        {
+          "file": "server.ts",
+          "line": 615,
+          "snippet": "app.post('/rest/user/login', login())"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        },
+        {
+          "file": "server.ts",
+          "line": 362,
+          "snippet": "app.use('/rest/user/reset-password', rateLimit({"
+        }
+      ],
+      "existing_mitigations": [
+        "Rate limiting is applied to /rest/user/reset-password and /rest/2fa/verify endpoints, demonstrating the application has rate-limiting capability"
+      ],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-770",
+        "CWE-405",
+        "CWE-400"
+      ],
+      "recommendation": "Apply rate limiting to the /rest/user/login endpoint using express-rate-limit middleware. Implement layered limits: per-source-IP limit (e.g., 100 requests per 15 minutes) to protect against botnets, and per-email limit (e.g., 5 failed attempts per 15 minutes) to prevent account lockout weaponization. Example: app.post('/rest/user/login', rateLimit({ windowMs: 15 * 60_000, max: 100, keyGenerator: r => r.ip }), rateLimit({ windowMs: 15 * 60_000, max: 5, keyGenerator: r => r.body.email }), login())"
+    },
+    {
+      "id": "T-UC-LOGIN-D-002",
+      "stride": "D",
+      "title": "Unbounded password input length enables CPU exhaustion",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login endpoint accepts passwords of arbitrary length with no validation constraint. An attacker can submit multi-megabyte passwords that consume CPU and memory proportional to the input size when passed to bcrypt hashing, amplifying the resource exhaustion attack.",
+      "attack_scenario": "An attacker sends a POST request to /rest/user/login with a password field containing a multi-megabyte string. The bcrypt hashing operation consumes CPU and memory proportional to the input size, potentially causing the server to run out of memory or become unresponsive faster than with normal-length passwords.",
+      "evidence": [
+        {
+          "file": "frontend/src/app/login/login.component.ts",
+          "line": 53,
+          "snippet": "public passwordControl = new UntypedFormControl('', [Validators.required, Validators.minLength(1)])"
+        },
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "high",
+      "cwe": [
+        "CWE-770",
+        "CWE-400"
+      ],
+      "recommendation": "Enforce a maximum password length before the password reaches the hashing function. Add validation in the login handler to reject passwords longer than 128 characters (or an appropriate limit for your application). Example: if (typeof password !== 'string' || password.length > 128) { return res.status(400).json({ error: 'Invalid email or password' }) }"
+    }
+  ]
+}
