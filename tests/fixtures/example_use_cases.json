@@ -1,0 +1,68 @@
+{
+  "_comment": "Shape stage 2 must emit for stage 3 to consume. Element type keys are load-bearing: each STRIDE skill iterates only the element types its letter applies to, so unlabelled boxes degrade the analysis into generic advice. 'mermaid' is optional; 'dfd' is not. 'file_hints' are optional but sharply improve evidence quality.",
+  "use_cases": [
+    {
+      "id": "UC-LOGIN",
+      "name": "Registered customer signs in with email and password",
+      "description": "A customer submits credentials to the login endpoint. The application verifies them against the user store and issues a signed token used by every subsequent authenticated request.",
+      "dfd": {
+        "external_entities": [
+          { "name": "Customer", "description": "Unauthenticated visitor holding credentials" }
+        ],
+        "processes": [
+          {
+            "name": "Login Handler",
+            "file_hints": ["routes/login.ts"],
+            "description": "Validates credentials and issues a token"
+          },
+          {
+            "name": "Token Issuer",
+            "file_hints": ["lib/insecurity.ts"],
+            "description": "Signs and verifies JWTs"
+          }
+        ],
+        "data_stores": [
+          { "name": "User Table", "file_hints": ["models/user.ts"], "description": "Email, password hash, role" }
+        ],
+        "data_flows": [
+          { "name": "Credential submission", "from": "Customer", "to": "Login Handler" },
+          { "name": "Credential lookup", "from": "Login Handler", "to": "User Table" },
+          { "name": "Token response", "from": "Token Issuer", "to": "Customer" }
+        ],
+        "trust_boundaries": [
+          { "name": "Internet → Application Server" },
+          { "name": "Application Server → Database" }
+        ]
+      },
+      "mermaid": "flowchart LR\n  C[Customer]:::ext -->|credentials| L[Login Handler]\n  L -->|lookup| U[(User Table)]\n  L --> T[Token Issuer]\n  T -->|JWT| C"
+    },
+    {
+      "id": "UC-PASSWORD-RESET",
+      "name": "Customer resets a forgotten password",
+      "description": "A customer requests a reset, receives a token out of band, and submits it with a new password to replace the stored credential.",
+      "dfd": {
+        "external_entities": [
+          { "name": "Customer" },
+          { "name": "Mail Provider", "description": "Third-party transactional email service" }
+        ],
+        "processes": [
+          { "name": "Reset Request Handler", "file_hints": ["routes/resetPassword.ts"] },
+          { "name": "Reset Completion Handler", "file_hints": ["routes/resetPassword.ts"] }
+        ],
+        "data_stores": [
+          { "name": "User Table", "file_hints": ["models/user.ts"] },
+          { "name": "Reset Token Store" }
+        ],
+        "data_flows": [
+          { "name": "Reset request", "from": "Customer", "to": "Reset Request Handler" },
+          { "name": "Reset email", "from": "Reset Request Handler", "to": "Mail Provider" },
+          { "name": "Token redemption", "from": "Customer", "to": "Reset Completion Handler" }
+        ],
+        "trust_boundaries": [
+          { "name": "Internet → Application Server" },
+          { "name": "Application Server → Mail Provider" }
+        ]
+      }
+    }
+  ]
+}

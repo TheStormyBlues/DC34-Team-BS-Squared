@@ -1,0 +1,68 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "S",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-S-001",
+      "stride": "S",
+      "title": "Credential stuffing against an unthrottled login endpoint",
+      "dfd_element": { "name": "Login Handler", "type": "process" },
+      "trust_boundary": "Internet → Application Server",
+      "description": "The login route performs a credential comparison with no rate limit, lockout, or CAPTCHA, so an attacker may guess passwords without bound.",
+      "attack_scenario": "The attacker replays a breach corpus of email/password pairs against POST /rest/user/login. With no throttling, a few thousand requests surface accounts whose owners reused a password.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 31,
+          "snippet": "const user = await models.User.findOne({ where: { email, password: hash(password) } })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": ["CWE-307", "CWE-287"],
+      "recommendation": "Apply a rate limit keyed by both source address and target account on the login route, and add escalating delay after repeated failures."
+    },
+    {
+      "id": "T-UC-LOGIN-S-002",
+      "stride": "S",
+      "title": "Session token forgeable from a signing key held in source control",
+      "dfd_element": { "name": "Customer", "type": "external_entity" },
+      "trust_boundary": "Internet → Application Server",
+      "description": "The JWT signing key is committed to the repository, so anyone who can read the source can mint a token asserting any identity.",
+      "attack_scenario": "The attacker clones the public repository, reads the private key, signs a token with the administrator's subject claim, and presents it to any authenticated endpoint.",
+      "evidence": [
+        { "file": "lib/insecurity.ts", "line": 23, "snippet": "const privateKey = '<redacted RSA private key>'" }
+      ],
+      "existing_mitigations": ["Tokens carry an expiry claim, limiting the window of a leaked token"],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": ["CWE-798", "CWE-347"],
+      "recommendation": "Load signing material from the environment, rotate the committed key, and purge it from git history."
+    },
+    {
+      "id": "T-UC-LOGIN-S-003",
+      "stride": "S",
+      "title": "Session identifier not rotated on successful authentication",
+      "dfd_element": { "name": "Session Manager", "type": "process" },
+      "trust_boundary": "Internet → Application Server",
+      "description": "No session regeneration was located on the authentication path, leaving the pre-login identifier valid afterwards.",
+      "attack_scenario": "The attacker plants a known session identifier in the victim's browser, waits for the victim to authenticate, then reuses that identifier to act as them.",
+      "evidence": [],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": ["CWE-384"],
+      "recommendation": "Regenerate the session identifier immediately after a successful credential check."
+    }
+  ]
+}
