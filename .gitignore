@@ -160,8 +160,6 @@ env.bak/
 repo/
 # output/* rather than output/, because git cannot re-include a path inside an
 # excluded directory — and output/_example/ is documentation, not a run artifact.
-output/*
-!output/_example/
 venv.bak/
 
 # Spyder project settings

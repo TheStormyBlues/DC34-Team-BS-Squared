@@ -1,0 +1,11 @@
+flowchart LR
+    CUST[Client]
+    LOGIN(Login Handler)
+    USERS[(Database)]
+
+    CUST -->|POST /rest/user/login with email and password| LOGIN
+    LOGIN -->|Query user with matching email and hashed password| USERS
+    USERS -->|Return user data| LOGIN
+    LOGIN -->|Return temporary token for 2FA verification (if TOTP secret exists)| CUST
+    LOGIN -->|Create authenticated user session and return JWT token (if no TOTP)| CUST
+    CUST -->|Store JWT token in localStorage and cookie| CUST

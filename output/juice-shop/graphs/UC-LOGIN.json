@@ -1,0 +1,60 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "name": "User Login",
+  "nodes": [
+    {
+      "id": "client",
+      "type": "external_entity",
+      "name": "Client"
+    },
+    {
+      "id": "login_handler",
+      "type": "process",
+      "name": "Login Handler",
+      "file": "routes/login.ts"
+    },
+    {
+      "id": "database",
+      "type": "data_store",
+      "name": "Database"
+    },
+    {
+      "id": "frontend_client",
+      "type": "external_entity",
+      "name": "Frontend Client",
+      "file": "frontend/src/app/login/login.component.ts"
+    }
+  ],
+  "edges": [
+    {
+      "from": "client",
+      "to": "login_handler",
+      "description": "POST /rest/user/login with email and password"
+    },
+    {
+      "from": "login_handler",
+      "to": "database",
+      "description": "Query user with matching email and hashed password"
+    },
+    {
+      "from": "database",
+      "to": "login_handler",
+      "description": "Return user data"
+    },
+    {
+      "from": "login_handler",
+      "to": "client",
+      "description": "Return temporary token for 2FA verification (if TOTP secret exists)"
+    },
+    {
+      "from": "login_handler",
+      "to": "client",
+      "description": "Create authenticated user session and return JWT token (if no TOTP)"
+    },
+    {
+      "from": "client",
+      "to": "frontend_client",
+      "description": "Store JWT token in localStorage and cookie"
+    }
+  ]
+}

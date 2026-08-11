@@ -1,0 +1,72 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "S",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-S-001",
+      "stride": "S",
+      "title": "SQL injection enables authentication bypass in login query",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login query is constructed by string concatenation with user-supplied email and password, allowing SQL injection attacks to bypass authentication. An attacker can inject SQL syntax (e.g., ' OR 1=1--) to authenticate as any user without knowing their password.",
+      "attack_scenario": "An attacker sends a POST request to /rest/user/login with email set to \"admin@juice-sh.op' --\" and any password. The injected SQL comment bypasses the password check, and the attacker is authenticated as the admin user.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-89",
+        "CWE-287",
+        "CWE-290"
+      ],
+      "recommendation": "Use parameterized queries instead of string concatenation. Replace the raw SQL query with Sequelize's built-in findOne method: await UserModel.findOne({ where: { email: req.body.email, password: security.hash(req.body.password), deletedAt: null } })"
+    },
+    {
+      "id": "T-UC-LOGIN-S-002",
+      "stride": "S",
+      "title": "Credential stuffing attack via unthrottled login endpoint",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The /rest/user/login endpoint has no rate limiting, throttling, lockout mechanism, or CAPTCHA protection. An attacker can perform unlimited login attempts using a corpus of breached credentials, enabling credential stuffing attacks to compromise user accounts.",
+      "attack_scenario": "An attacker uses a tool to send thousands of login requests per second with email/password pairs from a known breach. Without rate limiting, the attacker can test thousands of credentials in minutes and identify valid accounts.",
+      "evidence": [
+        {
+          "file": "server.ts",
+          "line": 615,
+          "snippet": "app.post('/rest/user/login', login())"
+        },
+        {
+          "file": "server.ts",
+          "line": 362,
+          "snippet": "app.use('/rest/user/reset-password', rateLimit({ windowMs: 5 * 60 * 1000, max: 100, keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } }))"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-307",
+        "CWE-640"
+      ],
+      "recommendation": "Apply rate limiting middleware to the login endpoint. Example: app.post('/rest/user/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: ({ headers, ip }) => headers['X-Forwarded-For'] ?? ip }), login()). Consider also implementing account lockout after N failed attempts and CAPTCHA challenges."
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "use_case_id": "UC-LOGIN",
+  "stride_letter": "T",
+  "threats": [
+    {
+      "id": "T-UC-LOGIN-T-001",
+      "stride": "T",
+      "title": "SQL Injection in login query allows tampering with authentication",
+      "dfd_element": {
+        "name": "Login Handler",
+        "type": "process"
+      },
+      "trust_boundary": "Internet \u2192 Application Server",
+      "description": "The login handler constructs a SQL query using string concatenation with user-supplied email and password, allowing an attacker to inject SQL that modifies the WHERE clause. An attacker could inject SQL to bypass password checks or modify the query logic to authenticate as any user.",
+      "attack_scenario": "An attacker submits email: admin@juice-sh.op' OR '1'='1 and any password. The resulting query becomes SELECT * FROM Users WHERE email = 'admin@juice-sh.op' OR '1'='1' AND password = '...' which returns the admin user regardless of password, allowing authentication bypass and session hijacking.",
+      "evidence": [
+        {
+          "file": "routes/login.ts",
+          "line": 34,
+          "snippet": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true })"
+        }
+      ],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "high",
+      "impact": "high",
+      "risk": "critical",
+      "confidence": "high",
+      "cwe": [
+        "CWE-89"
+      ],
+      "recommendation": "Use parameterized queries or prepared statements. Replace the string concatenation with sequelize's parameterized query API: models.sequelize.query('SELECT * FROM Users WHERE email = ? AND password = ? AND deletedAt IS NULL', { replacements: [req.body.email, security.hash(req.body.password)], model: UserModel, plain: true })"
+    },
+    {
+      "id": "T-UC-LOGIN-T-002",
+      "stride": "T",
+      "title": "JWT token transmitted in response can be intercepted and tampered with",
+      "dfd_element": {
+        "name": "Create authenticated user session and return JWT token if no TOTP",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The JWT token is returned in the response to the client without encryption. While JWT is signed, if transmitted over unencrypted channels or if the signing key is compromised, an attacker could tamper with the token claims.",
+      "attack_scenario": "An attacker performing a man-in-the-middle attack intercepts the JWT token response. If the connection is not properly secured with TLS, the attacker could read or modify the token before it reaches the client.",
+      "evidence": [],
+      "existing_mitigations": [
+        "JWT is signed with RS256 algorithm"
+      ],
+      "status": "partial",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Ensure all communication is over HTTPS/TLS. Verify that the JWT signing key is properly protected and rotated regularly. Consider using short-lived tokens with refresh token rotation."
+    },
+    {
+      "id": "T-UC-LOGIN-T-003",
+      "stride": "T",
+      "title": "Temporary 2FA token transmitted in response can be tampered with",
+      "dfd_element": {
+        "name": "Return temporary token for 2FA verification if TOTP secret exists",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Application Server \u2192 Client",
+      "description": "The temporary token for 2FA verification is returned in the response without encryption. An attacker could intercept and tamper with this token if the connection is not properly secured.",
+      "attack_scenario": "An attacker performing a man-in-the-middle attack intercepts the temporary 2FA token. If the token format is predictable or the server does not properly validate it, the attacker could modify it to bypass 2FA verification.",
+      "evidence": [],
+      "existing_mitigations": [
+        "Temporary token is signed with RS256"
+      ],
+      "status": "partial",
+      "likelihood": "medium",
+      "impact": "high",
+      "risk": "high",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Ensure all communication is over HTTPS/TLS. Use short expiration times for temporary tokens. Validate token signature and expiration on every 2FA verification attempt."
+    },
+    {
+      "id": "T-UC-LOGIN-T-004",
+      "stride": "T",
+      "title": "Database query results can be tampered with if database connection is compromised",
+      "dfd_element": {
+        "name": "Return user data",
+        "type": "data_flow"
+      },
+      "trust_boundary": "Database \u2192 Application Server",
+      "description": "User data returned from the database could be tampered with if the database connection is not properly secured or if an attacker gains access to the database layer.",
+      "attack_scenario": "An attacker with network access to the database connection could perform a man-in-the-middle attack to modify the user data in transit, potentially returning false authentication results or modified user credentials.",
+      "evidence": [],
+      "existing_mitigations": [],
+      "status": "unmitigated",
+      "likelihood": "low",
+      "impact": "high",
+      "risk": "medium",
+      "confidence": "low",
+      "cwe": [
+        "CWE-347"
+      ],
+      "recommendation": "Use encrypted connections (SSL/TLS) for all database communications. Implement network segmentation to restrict database access. Use connection pooling with proper authentication."
+    }
+  ]
+}
